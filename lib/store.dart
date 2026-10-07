@@ -17,7 +17,7 @@ class IssueStore extends ChangeNotifier {
   factory IssueStore({
     DateTime Function()? clock,
     String householdName = 'わが家',
-    String deviceId = 'dev',
+    String? deviceId,
     Storage? storage,
     List<Member>? members,
     String? initialMeId,
@@ -32,7 +32,7 @@ class IssueStore extends ChangeNotifier {
       clock: clock,
       householdName: householdName,
       // 一度決めた端末idは、次からもそれを使う（opのidが変わらないように）。
-      deviceId: saved == null || saved.deviceId.isEmpty ? deviceId : saved.deviceId,
+      deviceId: saved == null || saved.deviceId.isEmpty ? deviceId ?? Device.newId() : saved.deviceId,
       storage: storage,
       members: named,
     );
