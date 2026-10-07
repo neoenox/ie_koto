@@ -90,7 +90,7 @@ export async function pullOps(db, householdId, since, limit, issueId = null) {
 /**
  * `POST /ops`。追記のみ。すでにある op_id は黙って落とす。
  *
- * D1 の往復を増やさないよう、既にあるものの確認 → 番号の確保 → まとめて挿入 の3回で済ませる。
+ * 既にあるものを確認し、番号の確保と挿入を同じbatchで確定する。
  * （D1 は無料枠でサブリクエスト数に上限があるので、op ごとに1往復させない）
  */
 export async function pushOps(db, householdId, incoming, now) {
@@ -103,25 +103,23 @@ export async function pushOps(db, householdId, incoming, now) {
     return { cursor: Number(household?.seq ?? 0), accepted: 0, duplicates: incoming.length };
   }
 
-  // 番号は世帯ごとに独立。まとめて取り、op に配る。
-  const bumped = await db
-    .prepare('UPDATE households SET seq = seq + ? WHERE id = ? RETURNING seq')
-    .bind(fresh.length, householdId)
-    .first();
-  const last = Number(bumped?.seq ?? fresh.length);
-  const first = last - fresh.length + 1;
-
+  // D1のbatchはトランザクション。番号だけ先に公開すると、後から小さいseqの
+  // opが挿入され、進んだcursorでは取得できなくなるので、必ず挿入と同時に確定する。
+  const reserve = db.prepare('UPDATE households SET seq = seq + ? WHERE id = ?')
+    .bind(fresh.length, householdId);
   const statements = fresh.map((op, index) =>
     db
       .prepare(
         `INSERT OR IGNORE INTO ops
            (household_id, op_id, seq, device_id, lamport, kind, issue_id, payload, at, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, (SELECT seq FROM households WHERE id = ?) - ? + ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         householdId,
         op.id,
-        first + index,
+        householdId,
+        fresh.length,
+        index + 1,
         op.deviceId,
         op.lamport,
         op.kind,
@@ -132,11 +130,12 @@ export async function pushOps(db, householdId, incoming, now) {
       ),
   );
   // batch は D1 では1回の往復で済む（op ごとに往復しない）。
-  const results = await db.batch(statements);
-  const accepted = results.reduce((sum, result) => sum + Number(result?.meta?.changes ?? 0), 0);
+  const results = await db.batch([reserve, ...statements]);
+  const accepted = results.slice(1).reduce((sum, result) => sum + Number(result?.meta?.changes ?? 0), 0);
+  const household = await db.prepare('SELECT seq FROM households WHERE id = ?').bind(householdId).first();
 
   return {
-    cursor: last,
+    cursor: Number(household?.seq ?? 0),
     accepted,
     duplicates: incoming.length - accepted,
   };
