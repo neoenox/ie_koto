@@ -72,6 +72,8 @@ Op? decodeOp(Map<Object?, Object?> raw) {
   if (id is! String || id != '$deviceId:$lamport') return null;
 
   final dataRaw = raw['data'];
+  if (dataRaw != null && dataRaw is! Map) return null;
+  if (!_validData(kind, dataRaw is Map ? dataRaw : const {})) return null;
   final data = dataRaw is Map ? decodeData(dataRaw) : <String, Object?>{};
 
   // 種類ごとに、欠けると射影が壊れる項目だけ確かめる。
@@ -90,6 +92,8 @@ Op? decodeOp(Map<Object?, Object?> raw) {
 
   final derivedFrom = raw['derivedFrom'];
   final member = raw['member'];
+  if (derivedFrom != null && (derivedFrom is! String || derivedFrom.isEmpty || derivedFrom.length > 128)) return null;
+  if (member != null && (member is! String || member.isEmpty || member.length > 64)) return null;
   return Op(
     deviceId: deviceId,
     lamport: lamport,
@@ -100,6 +104,47 @@ Op? decodeOp(Map<Object?, Object?> raw) {
     derivedFrom: derivedFrom is String && derivedFrom.isNotEmpty ? derivedFrom : null,
     memberId: member is String && member.isNotEmpty ? member : null,
   );
+}
+
+bool _validData(OpKind kind, Map data) {
+  bool optionalString(String key) => !data.containsKey(key) || data[key] == null || data[key] is String;
+  bool optionalDate(String key) => !data.containsKey(key) || data[key] == null || decodeTime(data[key]) != null;
+  bool recurrence(Object? value) {
+    if (value is! Map) return false;
+    switch (value['kind']) {
+      case 'none':
+      case 'daily':
+        return true;
+      case 'weekdays':
+        final days = value['weekdays'];
+        return days is List && days.isNotEmpty && days.every((day) => day is int && day >= 1 && day <= 7);
+      case 'everyDays':
+        final days = value['everyDays'];
+        return days is int && days >= 1 && (!value.containsKey('fromCompletion') || value['fromCompletion'] is bool);
+      default:
+        return false;
+    }
+  }
+  switch (kind) {
+    case OpKind.add:
+      return data['title'] is String && (data['title'] as String).trim().isNotEmpty &&
+          optionalString('assigneeId') && optionalDate('dueDate') && optionalString('seriesId') &&
+          optionalString('originIssueId') && (!data.containsKey('recurrence') || data['recurrence'] == null || recurrence(data['recurrence']));
+    case OpKind.rename:
+      return data['title'] is String && (data['title'] as String).trim().isNotEmpty;
+    case OpKind.assignee:
+      return data.containsKey('assigneeId') && optionalString('assigneeId');
+    case OpKind.due:
+      return data.containsKey('dueDate') && optionalDate('dueDate');
+    case OpKind.recurrence:
+      return recurrence(data['recurrence']);
+    case OpKind.comment:
+      return data['text'] is String && (data['text'] as String).trim().isNotEmpty;
+    case OpKind.status:
+      return _statusOf(data['status']) != null;
+    default:
+      return true;
+  }
 }
 
 Map<String, Object?> encodeData(Map<String, Object?> data) => <String, Object?>{

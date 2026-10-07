@@ -195,8 +195,10 @@ test('壊れたopは、まとめて断る（400）', async () => {
   const noKind = { ...op('A', 3, 'comment', 'A:1'), kind: '' };
   const arrayData = { ...op('A', 4, 'comment', 'A:1'), data: [1, 2] };
   const badLamport = { ...op('A', 5, 'comment', 'A:1'), lamport: 0 };
+  const badAssignee = op('A', 6, 'assignee', 'A:1', { assigneeId: 42 });
+  const incompleteRename = op('A', 7, 'rename', 'A:1');
 
-  for (const broken of [mismatched, noKind, arrayData, badLamport]) {
+  for (const broken of [mismatched, noKind, arrayData, badLamport, badAssignee, incompleteRename]) {
     const reply = await post(env, [good, broken]);
     assert.equal(reply.status, 400, `${JSON.stringify(broken)} は断られるはず`);
     assert.equal(reply.body.error, 'bad_op');

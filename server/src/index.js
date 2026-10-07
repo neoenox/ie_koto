@@ -183,6 +183,7 @@ function parseOp(raw) {
 
   const data = raw.data === undefined || raw.data === null ? {} : raw.data;
   if (typeof data !== 'object' || Array.isArray(data)) return null;
+  if (!validKnownOpData(kind, data)) return null;
 
   const derivedFrom = raw.derivedFrom === undefined || raw.derivedFrom === null ? null : raw.derivedFrom;
   if (derivedFrom !== null && (typeof derivedFrom !== 'string' || derivedFrom.length === 0 || derivedFrom.length > 128)) return null;
@@ -193,6 +194,44 @@ function parseOp(raw) {
 
   // payload には送られてきた op を丸ごと入れる（知らない項目も落とさない）。
   return { ...raw, id, deviceId, lamport, kind, issueId, at, data, derivedFrom };
+}
+
+/** Reject malformed fields understood by this server/client protocol. Preserve unknown fields. */
+function validKnownOpData(kind, data) {
+  const optionalString = key => !Object.hasOwn(data, key) || data[key] === null || typeof data[key] === 'string';
+  const optionalDate = key => !Object.hasOwn(data, key) || data[key] === null ||
+    (typeof data[key] === 'string' && data[key].length <= 40 && Number.isFinite(Date.parse(data[key])));
+  const validRecurrence = value => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (value.kind === 'none' || value.kind === 'daily') return true;
+    if (value.kind === 'weekdays') return Array.isArray(value.weekdays) && value.weekdays.length > 0 &&
+      value.weekdays.every(day => Number.isInteger(day) && day >= 1 && day <= 7);
+    if (value.kind === 'everyDays') return Number.isInteger(value.everyDays) && value.everyDays >= 1 &&
+      (!Object.hasOwn(value, 'fromCompletion') || typeof value.fromCompletion === 'boolean');
+    return false;
+  };
+
+  switch (kind) {
+    case 'add':
+      return typeof data.title === 'string' && data.title.trim().length > 0 &&
+        optionalString('assigneeId') && optionalDate('dueDate') &&
+        optionalString('seriesId') && optionalString('originIssueId') &&
+        (!Object.hasOwn(data, 'recurrence') || data.recurrence === null || validRecurrence(data.recurrence));
+    case 'rename':
+      return typeof data.title === 'string' && data.title.trim().length > 0;
+    case 'assignee':
+      return Object.hasOwn(data, 'assigneeId') && optionalString('assigneeId');
+    case 'due':
+      return Object.hasOwn(data, 'dueDate') && optionalDate('dueDate');
+    case 'recurrence':
+      return Object.hasOwn(data, 'recurrence') && data.recurrence !== null && validRecurrence(data.recurrence);
+    case 'comment':
+      return typeof data.text === 'string' && data.text.trim().length > 0;
+    case 'status':
+      return ['open', 'doing', 'waiting', 'done'].includes(data.status);
+    default:
+      return true;
+  }
 }
 
 function parseCursor(raw) {
