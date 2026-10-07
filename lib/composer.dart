@@ -25,6 +25,7 @@ class _ComposerState extends State<Composer> {
   final FocusNode _focus = FocusNode();
 
   bool _open = false;
+  bool _showTitleError = false;
   String? _assigneeId;
   _When _when = _When.none;
 
@@ -44,7 +45,10 @@ class _ComposerState extends State<Composer> {
 
   void _close() {
     _focus.unfocus();
-    setState(() => _open = false);
+    setState(() {
+      _open = false;
+      _showTitleError = false;
+    });
   }
 
   DateTime? _dueDate() {
@@ -64,12 +68,16 @@ class _ComposerState extends State<Composer> {
 
   void _submit() {
     final title = _text.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      setState(() => _showTitleError = true);
+      _focus.requestFocus();
+      return;
+    }
     final issue = widget.store.add(title: title, assigneeId: _assigneeId, dueDate: _dueDate());
     _text.clear();
     _focus.requestFocus();
     widget.onAdded?.call(issue);
-    setState(() {});
+    setState(() => _showTitleError = false);
   }
 
   @override
@@ -113,9 +121,15 @@ class _ComposerState extends State<Composer> {
                     autofocus: true,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _submit(),
+                    onChanged: (value) {
+                      if (_showTitleError && value.trim().isNotEmpty) {
+                        setState(() => _showTitleError = false);
+                      }
+                    },
                     style: const TextStyle(fontSize: 16),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: '何する？',
+                      errorText: _showTitleError ? 'やることを入力してください' : null,
                       border: InputBorder.none,
                       isDense: true,
                     ),

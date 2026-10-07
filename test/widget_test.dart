@@ -50,6 +50,25 @@ void main() {
     expect(find.text('トイレットペーパーを買う'), findsOneWidget);
   });
 
+  testWidgets('未入力の追加は案内して、入力後はボタンで登録できる', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('追加'));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const ValueKey('composer-field'));
+    await tester.enterText(field, '   ');
+    await tester.tap(find.widgetWithText(FilledButton, '追加'));
+    await tester.pumpAndSettle();
+    expect(find.text('やることを入力してください'), findsOneWidget);
+    expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+
+    await tester.enterText(field, '追加ボタンで登録');
+    await tester.pumpAndSettle();
+    expect(find.text('やることを入力してください'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, '追加'));
+    await tester.pumpAndSettle();
+    expect(find.text('追加ボタンで登録'), findsOneWidget);
+  });
+
   testWidgets('完了は1タップ、もどすで戻せる', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.byKey(const ValueKey('done-牛乳を買う')));
