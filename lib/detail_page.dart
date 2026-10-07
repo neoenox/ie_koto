@@ -297,7 +297,7 @@ class _DetailPageState extends State<DetailPage> {
     final value = await _chooseOne('だれが', [
       _Opt(label: 'だれでも', value: 'none', selected: issue.assigneeId == null),
       for (final m in widget.store.members)
-        _Opt(label: m.name, value: m.id, selected: issue.assigneeId == m.id),
+        _Opt(label: widget.store.memberLabel(m.id)!, value: m.id, selected: issue.assigneeId == m.id),
     ]);
     if (value == null) return;
     widget.store.setAssignee(issue.id, value == 'none' ? null : value);
@@ -471,7 +471,7 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final actor = store.memberById(event.actorId)?.name ?? '不明';
+    final actor = store.memberLabel(event.actorId) ?? '不明';
     final muted = event.kind == EventKind.completed || event.kind == EventKind.reopened;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),

@@ -4,6 +4,22 @@ import 'package:ie_koto/store.dart';
 import 'package:ie_koto/sync/log.dart';
 
 void main() {
+  test('既定の担当者名は閲覧者基準で切り替え、変更した名前は維持する', () {
+    final store = IssueStore();
+    expect(store.assigneeWord('me'), '自分');
+    expect(store.assigneeWord('partner'), 'パートナー');
+    final issue = store.add(title: '買い物');
+    store.setAssignee(issue.id, 'partner');
+    store.setMeId('partner');
+    expect(store.assigneeWord('partner'), '自分');
+    expect(store.assigneeWord('me'), 'パートナー');
+    expect(store.byId(issue.id)!.events.last.text, '自分が担当になった');
+    store.renameMember('me', '太郎');
+    expect(store.assigneeWord('me'), '太郎');
+    expect(store.assigneeWord(null), 'だれでも');
+    expect(store.memberLabel('unknown'), isNull);
+  });
+
   IssueStore storeAt(DateTime now) => IssueStore(clock: () => now);
 
   test('登録はタイトルだけでできる', () {
