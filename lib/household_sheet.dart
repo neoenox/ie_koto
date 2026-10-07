@@ -51,6 +51,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   final _token = TextEditingController();
   String? _error;
   late SyncCredentials? _current = widget.current;
+  bool _rotatingToken = false;
 
   @override
   void initState() {
@@ -197,9 +198,28 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () async {
-                final token = await rotate();
+              onPressed: _rotatingToken ? null : () async {
+                setState(() => _rotatingToken = true);
+                String? token;
+                try {
+                  token = await rotate();
+                } catch (_) {
+                  token = null;
+                }
                 if (!mounted) return;
+                setState(() {
+                  _rotatingToken = false;
+                  if (token != null) {
+                    final current = _current!;
+                    _current = SyncCredentials(
+                      baseUrl: current.baseUrl,
+                      householdId: current.householdId,
+                      token: token!,
+                      cursor: 0,
+                    );
+                    _token.text = token;
+                  }
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -207,13 +227,8 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
                     ),
                   ),
                 );
-                if (token != null) setState(() {
-                  final current = _current!;
-                  _current = SyncCredentials(baseUrl: current.baseUrl, householdId: current.householdId, token: token, cursor: 0);
-                  _token.text = token;
-                });
               },
-              child: const Text('トークンを作り直す'),
+              child: Text(_rotatingToken ? '作り直しています…' : 'トークンを作り直す'),
             ),
           ),
         if (remove != null)
