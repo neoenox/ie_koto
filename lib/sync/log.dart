@@ -292,7 +292,10 @@ Map<String, Task> project(Iterable<Op> ops) {
     ..sort((a, b) => a.addOrder.compareTo(b.addOrder));
   for (final task in derived) {
     final origin = tasks[task.originIssueId];
-    final alive = origin != null && !origin.orphaned && origin.standingCompletionOpId == task.derivedFrom;
+    // A one-issue share deliberately omits the parent issue's private history.
+    // If that parent is absent, the share token already authorizes this derived issue.
+    final alive = origin == null ||
+        (!origin.deleted && !origin.orphaned && origin.standingCompletionOpId == task.derivedFrom);
     task.orphaned = !alive;
   }
 
