@@ -2,7 +2,6 @@ import 'dart:async';
 
 import '../store.dart';
 import 'api.dart';
-import 'log.dart';
 import 'storage.dart';
 
 /// 1回の同期で起きたこと（「最終同期」の表示に使う）。
@@ -120,9 +119,6 @@ class SyncSession {
       duplicates += first.duplicates;
 
       final pulled = await _pullAll();
-      // サーバーは自分のopも返してくるので、「新しく入った数」を先に数える。
-      final received = store.countNew(pulled.ops);
-      store.receive(pulled.ops); // 突き合わせて、射影し直す
       store.settle(); // もらった完了から、足りない「次の1件」を書く
 
       final second = await pushNow(); // 生まれた「次の1件」を、その場で送る
@@ -138,7 +134,7 @@ class SyncSession {
       return SyncOutcome(
         sent: sent,
         duplicates: duplicates,
-        received: received,
+        received: pulled.received,
         skipped: pulled.skipped,
       );
     } catch (error) {
@@ -149,16 +145,19 @@ class SyncSession {
 
   /// cursor から先を、空が返るまで取り切る（ページングも応答の分割もここで吸収する）。
   Future<_Pulled> _pullAll() async {
-    final ops = <Op>[];
+    var received = 0;
     var skipped = 0;
 
     for (var page = 0; page < maxPages; page++) {
       final result = await api.pull(since: cursor);
-      ops.addAll(result.ops);
+      // 記録を取り込んで保存してから、そのページの位置を確定する。
+      // 次の通信が失敗しても、cursorまでの記録が端末に残る。
+      received += store.countNew(result.ops);
+      if (result.ops.isNotEmpty) store.receive(result.ops);
       skipped += result.skipped;
       cursor = result.cursor;
       _saveSync();
-      if (result.ops.isEmpty) return _Pulled(ops, skipped);
+      if (result.ops.isEmpty) return _Pulled(received, skipped);
     }
     throw SyncException('bad_response', '差分が終わらない（cursor=$cursor）');
   }
@@ -200,8 +199,8 @@ class SyncSession {
 }
 
 class _Pulled {
-  const _Pulled(this.ops, this.skipped);
+  const _Pulled(this.received, this.skipped);
 
-  final List<Op> ops;
+  final int received;
   final int skipped;
 }
