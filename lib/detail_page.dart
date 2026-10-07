@@ -61,6 +61,8 @@ class _DetailPageState extends State<DetailPage> {
                 Row(children: [
                   MiniChip(label: '対応待ち', selected: true, onTap: null),
                 ]),
+                const SizedBox(height: 8),
+                const Text('家族・業者などの対応を待っています。まだ完了していません。'),
               ],
               const SizedBox(height: 14),
               const HairLine(),
@@ -88,6 +90,15 @@ class _DetailPageState extends State<DetailPage> {
                   ),
                 ),
               const SizedBox(height: 10),
+              if (!issue.isDone) ...[
+                OutlinedButton.icon(
+                  key: const ValueKey('detail-done'),
+                  onPressed: () => _complete(issue),
+                  icon: const Icon(Icons.check, size: 20),
+                  label: const Text('このやることを完了'),
+                ),
+                const SizedBox(height: 10),
+              ],
               const HairLine(),
               const SizedBox(height: 18),
               Text(
@@ -136,12 +147,26 @@ class _DetailPageState extends State<DetailPage> {
         },
         itemBuilder: (context) => [
           if (issue.status != IssueStatus.waiting)
-            const PopupMenuItem(value: 'waiting', child: Text('対応待ちにする')),
+            const PopupMenuItem(
+              value: 'waiting',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('対応待ちにする'),
+                subtitle: Text('家族・業者などの対応を待つ'),
+              ),
+            ),
           if (issue.status != IssueStatus.open)
-            const PopupMenuItem(value: 'open', child: Text('やることにもどす')),
-          const PopupMenuItem(value: 'rename', child: Text('名前を直す')),
+            const PopupMenuItem(
+              value: 'open',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('やることに戻す'),
+                subtitle: Text('自分たちで作業する状態に戻す'),
+              ),
+            ),
+          const PopupMenuItem(value: 'rename', child: Text('名前を変更')),
           if (widget.linkFor != null) const PopupMenuItem(value: 'link', child: Text('リンクを送る')),
-          const PopupMenuItem(value: 'delete', child: Text('消す')),
+          const PopupMenuItem(value: 'delete', child: Text('削除')),
         ],
       );
 
@@ -198,11 +223,13 @@ class _DetailPageState extends State<DetailPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
-                key: const ValueKey('detail-done'),
-                onPressed: issue.isDone ? null : () => _complete(issue),
-                icon: const Icon(Icons.check, size: 20),
-                tooltip: 'おわった',
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _comment,
+                builder: (context, value, _) => FilledButton(
+                  key: const ValueKey('detail-comment-send'),
+                  onPressed: value.text.trim().isEmpty ? null : () => _send(issue),
+                  child: const Text('送信'),
+                ),
               ),
             ],
           ),
@@ -228,14 +255,14 @@ class _DetailPageState extends State<DetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('「${issue.title}」を消しますか？', style: const TextStyle(fontSize: 16)),
+        title: Text('「${issue.title}」を削除しますか？', style: const TextStyle(fontSize: 16)),
         content: const Text('これまでのやりとりも見えなくなります。'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('やめる')),
           FilledButton(
             key: const ValueKey('confirm-delete'),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('消す'),
+            child: const Text('削除'),
           ),
         ],
       ),
@@ -250,7 +277,7 @@ class _DetailPageState extends State<DetailPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('名前を直す', style: TextStyle(fontSize: 16)),
+        title: const Text('名前を変更', style: TextStyle(fontSize: 16)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -270,7 +297,7 @@ class _DetailPageState extends State<DetailPage> {
     final value = await _chooseOne('だれが', [
       _Opt(label: 'だれでも', value: 'none', selected: issue.assigneeId == null),
       for (final m in widget.store.members)
-        _Opt(label: m.name, value: m.id, selected: issue.assigneeId == m.id),
+        _Opt(label: widget.store.memberLabel(m.id)!, value: m.id, selected: issue.assigneeId == m.id),
     ]);
     if (value == null) return;
     widget.store.setAssignee(issue.id, value == 'none' ? null : value);
@@ -444,7 +471,7 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final actor = store.memberById(event.actorId)?.name;
+    final actor = store.memberLabel(event.actorId) ?? '不明';
     final muted = event.kind == EventKind.completed || event.kind == EventKind.reopened;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -497,10 +524,9 @@ class _Timeline extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (actor != null && event.kind == EventKind.comment)
-                  Padding(
+                Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(actor, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                    child: Text('操作：$actor', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
                   ),
               ],
             ),

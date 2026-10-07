@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../model.dart';
 import '../store.dart';
 import 'api.dart';
 import 'storage.dart';
@@ -68,17 +69,20 @@ class SyncSession {
   Future<SyncOutcome>? _inFlight;
   Timer? _timer;
   bool _attached = false;
+  bool _directoryReady = false;
 
   /// ストアの変更を拾って、書いた直後に自動で送る。
   void attach() {
     if (_attached) return;
     _attached = true;
     store.onLocalWrite = _schedule;
+    store.onMemberWrite = _saveMember;
   }
 
   void detach() {
     _attached = false;
     store.onLocalWrite = null;
+    store.onMemberWrite = null;
     _timer?.cancel();
     _timer = null;
   }
@@ -105,7 +109,11 @@ class SyncSession {
     // 走り終わったら、次の呼び出しがまた走れるようにする。
     // （この行が作る future は誰も待たないので、失敗はここで受け止めておく。
     //   失敗は lastError に残っていて、次の同期でやり直せる）
-    unawaited(future.then((_) {}, onError: (Object _) {}).whenComplete(() => _inFlight = null));
+    unawaited(
+      future
+          .then((_) {}, onError: (Object _) {})
+          .whenComplete(() => _inFlight = null),
+    );
     return future;
   }
 
@@ -113,6 +121,24 @@ class SyncSession {
     try {
       var sent = 0;
       var duplicates = 0;
+
+      if (api.issueId == null) {
+        var directory = _directoryReady
+            ? await api.getMembers()
+            : await api.migrateAndGetMembers(store.legacyMemberNames);
+        store.applyMemberAliases(directory.aliases);
+        if (store.pendingMemberNames.isNotEmpty) {
+          for (final entry in Map<String, String>.of(
+            store.pendingMemberNames,
+          ).entries) {
+            await api.saveMember(Member(entry.key, entry.value));
+            store.markMemberSynced(entry.key);
+          }
+          directory = await api.getMembers();
+        }
+        store.applyMemberDirectory(directory);
+        _directoryReady = true;
+      }
 
       final first = await pushNow();
       sent += first.accepted;
@@ -168,12 +194,14 @@ class SyncSession {
     final target = storage;
     if (target == null || _savedCursor == cursor) return;
     _savedCursor = cursor;
-    target.saveSync(SyncCredentials(
-      baseUrl: api.baseUrl,
-      householdId: api.householdId,
-      token: api.token,
-      cursor: cursor,
-    ));
+    target.saveSync(
+      SyncCredentials(
+        baseUrl: api.baseUrl,
+        householdId: api.householdId,
+        token: api.token,
+        cursor: cursor,
+      ),
+    );
   }
 
   /// 同期をやめて、接続を閉じる。
@@ -192,6 +220,18 @@ class SyncSession {
   Future<void> _pushSafely() async {
     try {
       await pushNow();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  Future<void> _saveMember(Member member) async {
+    try {
+      final running = _inFlight;
+      if (running != null) await running;
+      await api.saveMember(member);
+      store.markMemberSynced(member.id);
+      if (api.issueId == null) await syncNow();
     } catch (error) {
       lastError = error;
     }

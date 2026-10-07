@@ -113,6 +113,7 @@ void main() {
     expect(second.deviceId, 'A', reason: '端末idは残っている方を使う');
     expect(second.meId, 'partner');
     expect(second.memberById('partner')?.name, 'あいぼう');
+    expect(second.pendingMemberNames, {'partner': 'あいぼう'}, reason: '接続前の名前変更は同期待ちで残る');
   });
 
   test('1件リンクは期限を過ぎると読まない', () {

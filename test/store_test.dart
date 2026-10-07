@@ -4,6 +4,49 @@ import 'package:ie_koto/store.dart';
 import 'package:ie_koto/sync/log.dart';
 
 void main() {
+  test('既定の担当者名は閲覧者基準で切り替え、変更した名前は維持する', () {
+    final store = IssueStore();
+    expect(store.assigneeWord('me'), '自分');
+    expect(store.assigneeWord('partner'), 'パートナー');
+    final issue = store.add(title: '買い物');
+    store.setAssignee(issue.id, 'partner');
+    store.setMeId('partner');
+    expect(store.assigneeWord('partner'), '自分');
+    expect(store.assigneeWord('me'), 'パートナー');
+    expect(store.byId(issue.id)!.events.last.text, '自分が担当になった');
+    store.renameMember('me', '太郎');
+    expect(store.assigneeWord('me'), '太郎');
+    expect(store.assigneeWord(null), 'だれでも');
+    expect(store.memberLabel('unknown'), isNull);
+  });
+
+  test('世帯共通の新IDへ旧ログを読み替え、以後は新IDで操作する', () {
+    final store = IssueStore();
+    final issue = store.add(title: '家族の用事', assigneeId: 'partner');
+    store.setAssignee(issue.id, 'partner');
+    store.applyMemberDirectory(const MemberDirectory(
+      members: [
+        Member('mem_11111111111111111111111111111111', '自分'),
+        Member('mem_22222222222222222222222222222222', 'パートナー'),
+        Member('mem_33333333333333333333333333333333', 'あき'),
+      ],
+      aliases: {
+        'me': 'mem_11111111111111111111111111111111',
+        'partner': 'mem_22222222222222222222222222222222',
+      },
+    ));
+
+    expect(store.byId(issue.id)!.assigneeId, 'mem_22222222222222222222222222222222');
+    expect(store.assigneeWord(store.byId(issue.id)!.assigneeId), 'パートナー');
+    expect(store.ops.first.data['assigneeId'], 'partner', reason: '既存ログは書き換えない');
+
+    store.setMeId('mem_22222222222222222222222222222222');
+    expect(store.assigneeWord(store.byId(issue.id)!.assigneeId), '自分');
+    store.setAssignee(issue.id, 'mem_33333333333333333333333333333333');
+    expect(store.ops.last.memberId, 'mem_22222222222222222222222222222222');
+    expect(store.ops.last.data['assigneeId'], 'mem_33333333333333333333333333333333');
+  });
+
   IssueStore storeAt(DateTime now) => IssueStore(clock: () => now);
 
   test('登録はタイトルだけでできる', () {

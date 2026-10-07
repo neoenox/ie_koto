@@ -38,6 +38,23 @@ void main() {
     }
   });
 
+  testWidgets('世帯設定から新しいメンバーを追加できる', (tester) async {
+    final store = IssueStore();
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('household-open')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('人を追加'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'あき');
+    await tester.tap(find.widgetWithText(FilledButton, '追加').last);
+    await tester.pumpAndSettle();
+
+    expect(store.members, hasLength(3));
+    expect(store.members.last.name, 'あき');
+    expect(store.members.last.id, startsWith('mem_'));
+  });
+
   testWidgets('追加はタイトルだけでできる', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('追加'));
@@ -148,9 +165,9 @@ void main() {
 
     await tester.tap(find.byTooltip('そのほか'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('消す'));
+    await tester.tap(find.text('削除'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('を消しますか'), findsOneWidget);
+    expect(find.textContaining('を削除しますか'), findsOneWidget);
 
     await tester.tap(find.text('やめる'));
     await tester.pumpAndSettle();
@@ -158,11 +175,46 @@ void main() {
 
     await tester.tap(find.byTooltip('そのほか'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('消す'));
+    await tester.tap(find.text('削除'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('confirm-delete')));
     await tester.pumpAndSettle();
     expect(find.text('子供の靴を買う'), findsNothing);
+  });
+
+  testWidgets('追加・完了・取り消しの履歴にそれぞれの操作者を表示する', (tester) async {
+    final store = IssueStore();
+    final issue = store.add(title: '操作者の確認');
+    store.setMeId('partner');
+    store.complete(issue.id);
+    store.setMeId('me');
+    store.undoComplete(issue.id);
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(issue.title));
+    await tester.pumpAndSettle();
+    expect(find.text('操作：自分'), findsNWidgets(2));
+    expect(find.text('操作：パートナー'), findsOneWidget);
+  });
+
+  testWidgets('ひとこと送信は案件を完了せず、独立した完了ボタンだけが完了する', (tester) async {
+    final store = IssueStore();
+    final issue = store.add(title: '送信と完了の確認');
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(issue.title));
+    await tester.pumpAndSettle();
+    final send = find.byKey(const ValueKey('detail-comment-send'));
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    await tester.enterText(find.byType(TextField), '牛乳を買ってきます');
+    await tester.pumpAndSettle();
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.text('牛乳を買ってきます'), findsOneWidget);
+    expect(store.byId(issue.id)!.isDone, isFalse);
+    await tester.tap(find.byKey(const ValueKey('detail-done')));
+    await tester.pumpAndSettle();
+    expect(store.byId(issue.id)!.isDone, isTrue);
   });
 
   testWidgets('キーボードが出ても、「ひとこと」の入力欄はキーボードの上に見える', (tester) async {
@@ -179,6 +231,6 @@ void main() {
     final keyboardTop = screen.height - 800 / tester.view.devicePixelRatio;
     final field = tester.getRect(find.byType(TextField));
     expect(field.bottom <= keyboardTop, isTrue, reason: '入力欄($field)がキーボード(上端 $keyboardTop)に隠れている');
-    expect(tester.getRect(find.byKey(const ValueKey('detail-done'))).bottom <= keyboardTop, isTrue);
+    expect(tester.getRect(find.byKey(const ValueKey('detail-comment-send'))).bottom <= keyboardTop, isTrue);
   });
 }

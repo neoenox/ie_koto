@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS ops (
 -- 差分は「seq > since」を挿入順に引くだけなので、この索引で足りる。
 CREATE INDEX IF NOT EXISTS ops_by_seq ON ops (household_id, seq);
 
--- 表示名（「自分」「パートナー」）。member との対応はまだアプリ側に無い（設計の手順3の残り）。
+-- 世帯内の安定したメンバーIDと共有表示名。
 CREATE TABLE IF NOT EXISTS members (
   household_id TEXT NOT NULL,
   member_id    TEXT NOT NULL,
@@ -48,3 +48,12 @@ CREATE TABLE IF NOT EXISTS share_tokens (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS share_tokens_by_household ON share_tokens (household_id);
+
+-- Resolve ids written by older clients without rewriting the append-only operation log.
+CREATE TABLE IF NOT EXISTS member_aliases (
+  household_id TEXT NOT NULL,
+  legacy_id TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  PRIMARY KEY (household_id, legacy_id),
+  UNIQUE (household_id, member_id)
+);
