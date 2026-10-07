@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../model.dart';
 
 /// 同期の設計を、サーバーなしで確かめるための参照実装。
@@ -51,6 +53,10 @@ class Op {
 
 /// 1台の端末。オフラインで書き、あとで送る。
 class Device {
+  static String newId() {
+    final random = Random.secure();
+    return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  }
   Device(this.id);
 
   final String id;
