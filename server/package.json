@@ -1,0 +1,13 @@
+{
+  "name": "ie-koto-server",
+  "private": true,
+  "type": "module",
+  "description": "いえこと の同期サーバー（Cloudflare Workers + D1）。opの出し入れ2本＋世帯の始末2本の計4本。",
+
+  "scripts": {
+    "test": "node --experimental-sqlite --test test/worker.test.mjs",
+    "serve": "node --experimental-sqlite test/serve.mjs",
+    "schema": "npx wrangler d1 execute ie_koto --remote --file=./schema.sql",
+    "deploy": "npx wrangler deploy"
+  }
+}

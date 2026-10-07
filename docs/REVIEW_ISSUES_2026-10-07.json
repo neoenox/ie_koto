@@ -1,0 +1,67 @@
+[
+  {
+    "reviewNumber": 1,
+    "title": "[P1] すべての通常端末が同じ端末IDを使い、記録が衝突する",
+    "url": "https://github.com/neoenox/ie_koto/issues/1"
+  },
+  {
+    "reviewNumber": 2,
+    "title": "[P1] 1件リンクが世帯全体を操作できる鍵を渡している",
+    "url": "https://github.com/neoenox/ie_koto/issues/2"
+  },
+  {
+    "reviewNumber": 3,
+    "title": "[P1] 受信を確定する前にcursorを進めるため、途中失敗で記録が欠落する",
+    "url": "https://github.com/neoenox/ie_koto/issues/3"
+  },
+  {
+    "reviewNumber": 4,
+    "title": "[P1] サーバーの番号確保と挿入が別処理で、並行送信時に永久欠落する",
+    "url": "https://github.com/neoenox/ie_koto/issues/4"
+  },
+  {
+    "reviewNumber": 5,
+    "title": "[P1] 定期案件の「次の1件」を共有すると、存在しない扱いになる",
+    "url": "https://github.com/neoenox/ie_koto/issues/5"
+  },
+  {
+    "reviewNumber": 6,
+    "title": "[P1] 不正な項目の型を受け入れ、射影を停止させる",
+    "url": "https://github.com/neoenox/ie_koto/issues/6"
+  },
+  {
+    "reviewNumber": 7,
+    "title": "[P1] Androidリリース版のManifestに通信権限がない",
+    "url": "https://github.com/neoenox/ie_koto/issues/7"
+  },
+  {
+    "reviewNumber": 8,
+    "title": "[P1] 世帯切り替えでローカル記録と送信状態が混在する",
+    "url": "https://github.com/neoenox/ie_koto/issues/8"
+  },
+  {
+    "reviewNumber": 9,
+    "title": "[P2] トークン再発行直後の招待文に古いトークンが入る",
+    "url": "https://github.com/neoenox/ie_koto/issues/9"
+  },
+  {
+    "reviewNumber": 10,
+    "title": "[P2] 復帰時・通常編集時に相手の変更を受信しない",
+    "url": "https://github.com/neoenox/ie_koto/issues/10"
+  },
+  {
+    "reviewNumber": 11,
+    "title": "[P2] 全案件を完了すると「おわったもの」へ入れなくなる",
+    "url": "https://github.com/neoenox/ie_koto/issues/11"
+  },
+  {
+    "reviewNumber": 12,
+    "title": "[P2] 別端末から読み込んだバックアップが共有されない",
+    "url": "https://github.com/neoenox/ie_koto/issues/12"
+  },
+  {
+    "reviewNumber": 13,
+    "title": "[P2] 別オリジンのWeb版では世帯削除がCORSで拒否される",
+    "url": "https://github.com/neoenox/ie_koto/issues/13"
+  }
+]

@@ -1,0 +1,15 @@
+name = "ie-koto-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 世帯の op を預かる SQLite。
+# `npx wrangler d1 create ie_koto` が出した database_id をここに貼る。
+[[d1_databases]]
+binding = "DB"
+database_name = "ie_koto"
+database_id = "ここに d1 create の database_id"
+
+[vars]
+# 開発中は別のポート（flutter run -d web-server）から叩くので許可する。
+# 本番はアプリのWebビルドと同じドメインに置くので、ここは自分のドメインに絞ってよい。
+ALLOWED_ORIGIN = "*"
