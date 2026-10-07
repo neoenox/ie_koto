@@ -88,6 +88,15 @@ class _DetailPageState extends State<DetailPage> {
                   ),
                 ),
               const SizedBox(height: 10),
+              if (!issue.isDone) ...[
+                OutlinedButton.icon(
+                  key: const ValueKey('detail-done'),
+                  onPressed: () => _complete(issue),
+                  icon: const Icon(Icons.check, size: 20),
+                  label: const Text('このやることを完了'),
+                ),
+                const SizedBox(height: 10),
+              ],
               const HairLine(),
               const SizedBox(height: 18),
               Text(
@@ -198,11 +207,13 @@ class _DetailPageState extends State<DetailPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
-                key: const ValueKey('detail-done'),
-                onPressed: issue.isDone ? null : () => _complete(issue),
-                icon: const Icon(Icons.check, size: 20),
-                tooltip: 'おわった',
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _comment,
+                builder: (context, value, _) => FilledButton(
+                  key: const ValueKey('detail-comment-send'),
+                  onPressed: value.text.trim().isEmpty ? null : () => _send(issue),
+                  child: const Text('送信'),
+                ),
               ),
             ],
           ),

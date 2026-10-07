@@ -165,6 +165,26 @@ void main() {
     expect(find.text('子供の靴を買う'), findsNothing);
   });
 
+  testWidgets('ひとこと送信は案件を完了せず、独立した完了ボタンだけが完了する', (tester) async {
+    final store = IssueStore();
+    final issue = store.add(title: '送信と完了の確認');
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(issue.title));
+    await tester.pumpAndSettle();
+    final send = find.byKey(const ValueKey('detail-comment-send'));
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    await tester.enterText(find.byType(TextField), '牛乳を買ってきます');
+    await tester.pumpAndSettle();
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.text('牛乳を買ってきます'), findsOneWidget);
+    expect(store.byId(issue.id)!.isDone, isFalse);
+    await tester.tap(find.byKey(const ValueKey('detail-done')));
+    await tester.pumpAndSettle();
+    expect(store.byId(issue.id)!.isDone, isTrue);
+  });
+
   testWidgets('キーボードが出ても、「ひとこと」の入力欄はキーボードの上に見える', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('廊下の電球を交換する'));
@@ -179,6 +199,6 @@ void main() {
     final keyboardTop = screen.height - 800 / tester.view.devicePixelRatio;
     final field = tester.getRect(find.byType(TextField));
     expect(field.bottom <= keyboardTop, isTrue, reason: '入力欄($field)がキーボード(上端 $keyboardTop)に隠れている');
-    expect(tester.getRect(find.byKey(const ValueKey('detail-done'))).bottom <= keyboardTop, isTrue);
+    expect(tester.getRect(find.byKey(const ValueKey('detail-comment-send'))).bottom <= keyboardTop, isTrue);
   });
 }
