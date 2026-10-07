@@ -382,7 +382,7 @@ test('CORSの前置きに答える（開発中は別のポートから叩くた�
   });
   assert.equal(preflight.status, 204);
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'http://127.0.0.1:8080');
-  assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, POST, OPTIONS');
+  assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, POST, DELETE, OPTIONS');
 
   const reply = await get(env);
   assert.equal(reply.headers.get('access-control-allow-origin'), '*', 'Originが無ければ * で返す');

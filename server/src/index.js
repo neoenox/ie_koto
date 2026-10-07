@@ -266,7 +266,7 @@ function corsHeaders(request, env) {
   const allowed = (env && env.ALLOWED_ORIGIN) || request.headers.get('origin') || '*';
   return {
     'access-control-allow-origin': allowed,
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
     'access-control-allow-headers': 'authorization, content-type',
     'access-control-max-age': '86400',
     vary: 'origin',
