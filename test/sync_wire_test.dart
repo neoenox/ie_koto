@@ -7,6 +7,20 @@ import 'package:ie_koto/sync/wire.dart';
 
 /// opのwire形式。実際にJSONを通して確かめる（サーバーを往復する形そのもの）。
 void main() {
+  test('不正な既知項目を持つopを射影前に捨てる', () {
+    final base = encodeOp(Op(deviceId: 'A', lamport: 1, kind: OpKind.add, issueId: 'A:1', at: DateTime(2026, 10, 6), data: {'title': '買い物'}));
+    final broken = [
+      {...base, 'data': {'title': '買い物', 'assigneeId': 42}},
+      {...base, 'kind': 'rename', 'data': <String, Object?>{}},
+      {...base, 'data': {'title': '買い物', 'seriesId': false}},
+      {...base, 'data': {'title': '買い物', 'dueDate': 'invalid'}},
+      {...base, 'derivedFrom': 42},
+      {...base, 'member': <String>[]},
+      {...base, 'data': {'title': '買い物', 'recurrence': {'kind': 'weekdays', 'weekdays': [8]}}},
+    ];
+    expect(decodeOps(broken).ops, isEmpty);
+    expect(decodeOps(broken).skipped, broken.length);
+  });
   test('追加のopは、そのまま往復する', () {
     final op = Op(
       deviceId: 'A',
