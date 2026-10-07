@@ -58,7 +58,7 @@ export async function ensureHousehold(db, householdId, tokenHash, now) {
  * since が実在する位置より先（端末が飛び越した）なら、実在する位置まで戻す。
  * 端末は cursor をそのまま覚えればよい。
  */
-export async function pullOps(db, householdId, since, limit, issueId = null) {
+export async function pullOps(db, householdId, since, limit, issueId = null, { standalone = false } = {}) {
   // issueId を渡すと、その1件のopだけを返す（1件リンクのページ用）。
   // 世帯の全部を相手のブラウザに置かないための絞り込みで、cursor の意味は変わらない。
   const filter = issueId ? ' AND issue_id = ?' : '';
@@ -68,15 +68,39 @@ export async function pullOps(db, householdId, since, limit, issueId = null) {
     .all();
 
   const ops = [];
+  const targetRows = [];
   let lastSeq = null;
   let skipped = 0;
   for (const row of rows.results ?? []) {
     try {
-      ops.push(JSON.parse(row.payload));
+      const op = JSON.parse(row.payload);
+      ops.push(op);
+      targetRows.push({ seq: Number(row.seq), op });
       lastSeq = Number(row.seq);
     } catch {
       // 壊れた行は返さない（1件のせいで世帯ぜんぶが読めなくなるより、飛ばす方がまし）。
       skipped += 1;
+    }
+  }
+
+  if (standalone && issueId && targetRows.length > 0) {
+    const add = targetRows.map(({ op }) => op).find((op) => op.kind === 'add');
+    const parentId = add?.data?.originIssueId;
+    if (typeof parentId === 'string' && parentId.length > 0) {
+      if (typeof add.derivedFrom !== 'string' ||
+          !await hasStandingAncestor(db, householdId, parentId, add.derivedFrom, new Set([issueId]), 0)) {
+        return { cursor: lastSeq, ops: [], skipped };
+      }
+      // The share needs a standalone projection of this issue. Remove its parent pointers;
+      // the response still contains operations for the authorized issue only.
+      for (let index = 0; index < ops.length; index += 1) {
+        const op = ops[index];
+        if (op.kind !== 'add') continue;
+        const data = { ...op.data };
+        delete data.originIssueId;
+        delete data.seriesId;
+        ops[index] = { ...op, derivedFrom: null, data };
+      }
     }
   }
 
@@ -85,6 +109,31 @@ export async function pullOps(db, householdId, since, limit, issueId = null) {
   const household = await db.prepare('SELECT seq FROM households WHERE id = ?').bind(householdId).first();
   const current = Number(household?.seq ?? 0);
   return { cursor: Math.min(since, current), ops, skipped };
+}
+
+async function hasStandingAncestor(db, householdId, issueId, expectedCompletionId, visited, depth) {
+  if (depth >= 64 || visited.has(issueId)) return false;
+  visited.add(issueId);
+  const rows = await db.prepare(
+    'SELECT payload FROM ops WHERE household_id = ? AND issue_id = ? ORDER BY seq',
+  ).bind(householdId, issueId).all();
+  const events = [];
+  for (const row of rows.results ?? []) {
+    try { events.push(JSON.parse(row.payload)); } catch { /* Ignore malformed stored rows. */ }
+  }
+  events.sort((a, b) => a.lamport - b.lamport || a.deviceId.localeCompare(b.deviceId) || a.id.localeCompare(b.id));
+  let added = null;
+  let standing = null;
+  for (const op of events) {
+    if (op.kind === 'add' && added === null) added = op;
+    if (op.kind === 'complete' && standing === null) standing = op.id;
+    if (op.kind === 'reopen' || (op.kind === 'status' && op.data?.status !== 'done')) standing = null;
+  }
+  if (added === null || standing !== expectedCompletionId) return false;
+  const parent = added.data?.originIssueId;
+  if (typeof parent !== 'string' || parent.length === 0) return true;
+  if (typeof added.derivedFrom !== 'string') return false;
+  return hasStandingAncestor(db, householdId, parent, added.derivedFrom, visited, depth + 1);
 }
 
 /**

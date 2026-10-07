@@ -91,7 +91,7 @@ async function handlePull(request, env, url, cors) {
   if (!owner && (!grant || grant.issue_id !== issueId)) return json({ error: 'unauthorized' }, 401, cors);
   if (grant && issueId !== grant.issue_id) return json({ error: 'unauthorized' }, 401, cors);
 
-  const page = await pullOps(db, householdId, since, limit, issueId);
+  const page = await pullOps(db, householdId, since, limit, issueId, { standalone: grant !== null });
   return json(page, 200, cors);
 }
 
