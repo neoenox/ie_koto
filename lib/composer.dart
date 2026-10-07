@@ -25,6 +25,7 @@ class _ComposerState extends State<Composer> {
   final FocusNode _focus = FocusNode();
 
   bool _open = false;
+  bool _showTitleError = false;
   String? _assigneeId;
   _When _when = _When.none;
 
@@ -44,7 +45,10 @@ class _ComposerState extends State<Composer> {
 
   void _close() {
     _focus.unfocus();
-    setState(() => _open = false);
+    setState(() {
+      _open = false;
+      _showTitleError = false;
+    });
   }
 
   DateTime? _dueDate() {
@@ -64,12 +68,16 @@ class _ComposerState extends State<Composer> {
 
   void _submit() {
     final title = _text.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      setState(() => _showTitleError = true);
+      _focus.requestFocus();
+      return;
+    }
     final issue = widget.store.add(title: title, assigneeId: _assigneeId, dueDate: _dueDate());
     _text.clear();
     _focus.requestFocus();
     widget.onAdded?.call(issue);
-    setState(() {});
+    setState(() => _showTitleError = false);
   }
 
   @override
@@ -113,10 +121,21 @@ class _ComposerState extends State<Composer> {
                     autofocus: true,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _submit(),
+                    onChanged: (value) {
+                      if (_showTitleError && value.trim().isNotEmpty) {
+                        setState(() => _showTitleError = false);
+                      }
+                    },
                     style: const TextStyle(fontSize: 16),
-                    decoration: const InputDecoration(
-                      hintText: '何する？',
-                      border: InputBorder.none,
+                    decoration: InputDecoration(
+                      labelText: 'やること（必須）',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      hintText: '例：牛乳を買う',
+                      errorText: _showTitleError ? 'やることを入力してください' : null,
+                      filled: true,
+                      fillColor: scheme.surfaceContainerLow,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                       isDense: true,
                     ),
                   ),
