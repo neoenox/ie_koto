@@ -157,7 +157,29 @@ class SharedPrefsStore implements KeyValueStore {
 ///
 /// まとまりの中は行ごとに読むので、壊れた行があってもその1行だけ捨てられる。
 class DeviceStorage implements Storage {
-  DeviceStorage(this._store);
+  DeviceStorage(this._store) : _baseStore = _store, namespace = null;
+
+  DeviceStorage._(this._baseStore, String namespace)
+      : _store = _ScopedKeyValueStore(_baseStore, namespace),
+        namespace = namespace;
+
+  final KeyValueStore _baseStore;
+  final String? namespace;
+
+  /// Keep each household's operation log and local settings in a separate key space.
+  DeviceStorage scoped(String namespace) {
+    const migratedKey = 'ie_koto.household_scope_migrated';
+    if (_baseStore.read(migratedKey) != 'true') {
+      final scoped = _ScopedKeyValueStore(_baseStore, namespace);
+      for (final key in [chunksKey, deviceKey, pushedKey, syncKey, meKey, membersKey,
+        for (var i = 0; i < (int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0); i++) chunkKey(i)]) {
+        final value = _baseStore.read(key);
+        if (value != null && scoped.read(key) == null) scoped.write(key, value);
+      }
+      _baseStore.write(migratedKey, 'true');
+    }
+    return DeviceStorage._(_baseStore, namespace);
+  }
 
   /// 端末の置き場を開く（アプリの起動時に1回）。
   static Future<DeviceStorage> open() async => DeviceStorage(await SharedPrefsStore.open());
@@ -333,4 +355,15 @@ class DeviceStorage implements Storage {
       return const <String, String>{};
     }
   }
+}
+
+class _ScopedKeyValueStore implements KeyValueStore {
+  _ScopedKeyValueStore(this.store, this.namespace);
+  final KeyValueStore store;
+  final String namespace;
+  String _key(String key) => 'ie_koto.household.$namespace.$key';
+  @override
+  String? read(String key) => store.read(_key(key));
+  @override
+  void write(String key, String? value) => store.write(_key(key), value);
 }

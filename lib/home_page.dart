@@ -43,6 +43,18 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
+  void didUpdateWidget(covariant HomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.store != widget.store) {
+      oldWidget.store.removeListener(_onStoreChanged);
+      widget.store.addListener(_onStoreChanged);
+      _rowKeys.clear();
+      _sweep?.cancel();
+      _scheduleSweep();
+    }
+  }
+
+  @override
   void dispose() {
     widget.store.removeListener(_onStoreChanged);
     _sweep?.cancel();
