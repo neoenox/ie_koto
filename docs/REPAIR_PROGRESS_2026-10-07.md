@@ -1,18 +1,13 @@
 # レビュー修正の進捗（2026-10-07）
 
-リポジトリ: https://github.com/neoenox/ie_koto （非公開）。レビューの13件をIssue #1〜#13として登録してから修正を開始した。
+公開リポジトリ: https://github.com/neoenox/ie_koto
+修正PR: https://github.com/neoenox/ie_koto/pull/14
 
-修正ブランチ: `fix/review-data-integrity`。
+- #3: 受信ページを保存してからcursorを確定する。実装済み、未マージ。
+- #4: seq確保とop挿入を同じD1 batchで確定する。実装済み、未マージ。
+- #1: 新規端末に暗号学的乱数の128bit IDを生成・保存する。再起動後のIDと未送信履歴を保持する。既存のdevは履歴を保つため維持しており、複数の既存dev端末の衝突を解消する移行は未対応。
+- #6: 既知項目の型・必須項目・定期設定を端末とサーバーで検査する。未知項目は保持する。実装済み、未マージ。
 
-## 最初の修正
+最新検証: flutter analyze 問題なし、Flutter全128件成功、サーバー全18件成功、git diff --check 成功。
 
-- #3: 受信ページをストアへ取り込んで保存してからcursorを確定する。次ページが失敗しても、再起動後に取得済み記録が残る。
-- #4: 世帯seqの番号確保とop挿入を一つのD1 batchに含める。遅れた送信のopが既に公開したcursorより前に挿入されなくなる。
-
-両方とも回帰テストが修正前に失敗し、修正後に成功した。
-
-検証: `flutter analyze` 問題なし、`flutter test --reporter expanded` 126件成功、`server` の `npm test` 18件成功、`git diff --check` 成功。
-
-未対応: #1、#2、#5〜#13。Issueはすべて開いたまま。特に端末IDの既存データ移行、共有リンクの権限制限、世帯ごとの保存分離は追加の修正が必要。
-
-今回の検証はローカル環境で行った。SharedPreferencesの終了直前の書き込み耐久性、Android実機、Cloudflare本番での確認は未実施。マージ・デプロイは行っていない。
+#2、#5、#7〜#13と#1の既存端末移行は未対応。Issueは開いたまま。Android実機・Cloudflare本番・終了直前の保存耐久性は未確認。マージ・デプロイは未実施。
