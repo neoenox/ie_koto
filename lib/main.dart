@@ -239,7 +239,7 @@ class _IeKotoAppState extends State<IeKotoApp> {
   /// リンクを開くのは相手のブラウザなので、**アプリ（Webビルド）が乗っている場所**を使う。
   /// Webで動いているなら、いま開いているページのドメイン。Android からは、APIのドメイン
   /// （本番はアプリもAPIも同じドメインに置くので、そこがWeb版の場所でもある）。
-  String? _linkFor(Issue issue) {
+  Future<String?> _linkFor(Issue issue) async {
     final credentials = _credentials;
     if (credentials == null) return null;
 
@@ -249,14 +249,32 @@ class _IeKotoAppState extends State<IeKotoApp> {
     // 開発中はアプリとAPIのポートが違うので、APIの場所をリンクに書いておく。
     final apiUrl = baseUrl == credentials.baseUrl ? null : credentials.baseUrl;
 
+    final expiry = DateTime.now().add(const Duration(days: 7));
+    final api = SyncApi(
+      baseUrl: credentials.baseUrl,
+      householdId: credentials.householdId,
+      token: credentials.token,
+    );
+    final String shareToken;
+    try {
+      shareToken = await api.createShareToken(
+        issueId: issue.id,
+        memberId: 'partner',
+        expiresAt: expiry,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      api.close();
+    }
     return OneLink(
       baseUrl: baseUrl,
       apiUrl: apiUrl,
       householdId: credentials.householdId,
-      token: credentials.token,
+      token: shareToken,
       issueId: issue.id,
       // 送りっぱなしにしない。7日を過ぎたリンクは、開いてもただのアプリになる。
-      expiresAt: DateTime.now().add(const Duration(days: 7)),
+      expiresAt: expiry,
     ).text;
   }
 

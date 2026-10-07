@@ -11,7 +11,7 @@ class DonePage extends StatelessWidget {
   const DonePage({super.key, required this.store, this.linkFor});
 
   final IssueStore store;
-  final String? Function(Issue)? linkFor;
+  final Future<String?> Function(Issue)? linkFor;
 
   @override
   Widget build(BuildContext context) {

@@ -20,7 +20,7 @@ class HomePage extends StatefulWidget {
   final IssueStore store;
 
   /// 1件リンクを作る（同期の設定が無ければ null）。詳細の「そのほか」から使う。
-  final String? Function(Issue)? linkFor;
+  final Future<String?> Function(Issue)? linkFor;
 
   /// いま使っている同期の設定。nullなら未接続。
   final SyncCredentials? credentials;

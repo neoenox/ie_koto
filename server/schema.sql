@@ -37,3 +37,14 @@ CREATE TABLE IF NOT EXISTS members (
   display_name TEXT NOT NULL,
   PRIMARY KEY (household_id, member_id)
 );
+
+-- 個別共有鍵。指定案件に限定し、有効期限はサーバー側でも検査する。
+CREATE TABLE IF NOT EXISTS share_tokens (
+  token_hash TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL,
+  issue_id TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS share_tokens_by_household ON share_tokens (household_id);
