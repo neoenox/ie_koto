@@ -19,6 +19,7 @@ class SavedState {
     this.skippedOps = 0,
     this.meId = '',
     this.memberNames = const <String, String>{},
+    this.pendingRelayIds = const <String>{},
   });
 
   /// 前回の起動で決めた端末id。空なら初回。
@@ -42,6 +43,8 @@ class SavedState {
 
   /// 表示名の上書き（member_id → 名前。端末ローカルで持つ）。
   final Map<String, String> memberNames;
+
+  final Set<String> pendingRelayIds;
 }
 
 /// 同期に必要な設定。これが残っていれば、次からはビルド時に渡さなくてよい。
@@ -111,6 +114,8 @@ abstract class Storage {
   /// 送信済みの位置（自分のopの最大の論理時計）。
   void savePushedThrough(int lamport);
 
+  void savePendingRelayIds(Set<String> ids);
+
   void saveSync(SyncCredentials credentials);
 
   /// この端末を使う人。
@@ -169,6 +174,7 @@ class DeviceStorage implements Storage {
   static const String chunksKey = '$opsPrefix.chunks';
   static const String deviceKey = 'ie_koto.device_id';
   static const String pushedKey = 'ie_koto.pushed_through';
+  static const String relayKey = 'ie_koto.pending_relay_ids';
   static const String syncKey = 'ie_koto.sync';
   static const String meKey = 'ie_koto.me_id';
   static const String membersKey = 'ie_koto.member_names';
@@ -235,6 +241,13 @@ class DeviceStorage implements Storage {
   }
 
   @override
+  void savePendingRelayIds(Set<String> ids) {
+    _store.write(relayKey, jsonEncode(ids.toList()..sort()));
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
+  @override
   void saveSync(SyncCredentials credentials) {
     _store.write(syncKey, jsonEncode(credentials.toJson()));
     _cached = null;
@@ -264,6 +277,7 @@ class DeviceStorage implements Storage {
       if (last >= 0) _store.read(chunkKey(last)) ?? '',
       _store.read(deviceKey) ?? '',
       _store.read(pushedKey) ?? '',
+      _store.read(relayKey) ?? '',
       _store.read(syncKey) ?? '',
       _store.read(meKey) ?? '',
       _store.read(membersKey) ?? '',
@@ -294,6 +308,7 @@ class DeviceStorage implements Storage {
       deviceId: _store.read(deviceKey) ?? '',
       ops: decoded.ops,
       pushedThrough: int.tryParse(_store.read(pushedKey) ?? '') ?? 0,
+      pendingRelayIds: _readRelayIds(),
       sync: _readSync(),
       skippedOps: decoded.skipped,
       meId: _store.read(meKey) ?? '',
@@ -305,6 +320,16 @@ class DeviceStorage implements Storage {
         for (final line in (text ?? '').split('\n'))
           if (line.trim().isNotEmpty) line,
       ];
+
+  Set<String> _readRelayIds() {
+    try {
+      final raw = jsonDecode(_store.read(relayKey) ?? '[]');
+      if (raw is! List) return <String>{};
+      return raw.whereType<String>().where((id) => id.isNotEmpty).toSet();
+    } catch (_) {
+      return <String>{};
+    }
+  }
 
   SyncCredentials? _readSync() {
     final raw = _store.read(syncKey);

@@ -64,6 +64,7 @@ class Device {
 
   /// 送信待ち。同期できたら消す。
   final List<Op> outbox = <Op>[];
+  final Set<String> pendingRelayIds = <String>{};
 
   /// 受け取ったop（自分のぶんも含む）。
   final List<Op> log = <Op>[];
@@ -119,12 +120,24 @@ class Device {
   ///
   /// 送信待ちは「自分が書いたopのうち、サーバーが確認していないもの」だけ。
   /// 相手のopは送り返さないし、確認済みの自分のopも送り直さない。
-  void restore(Iterable<Op> saved, {int pushedThrough = 0}) {
+  void restore(Iterable<Op> saved, {int pushedThrough = 0, Set<String> pendingRelayIds = const <String>{}}) {
     receive(saved);
     _pushedThrough = pushedThrough < 0 ? 0 : pushedThrough;
     outbox
       ..clear()
-      ..addAll(log.where((op) => op.deviceId == id && op.lamport > _pushedThrough));
+      ..addAll(log.where((op) => (op.deviceId == id && op.lamport > _pushedThrough) || pendingRelayIds.contains(op.id)));
+    this.pendingRelayIds
+      ..clear()
+      ..addAll(pendingRelayIds.where(_known.contains));
+  }
+
+  void queueForRelay(Iterable<Op> ops) {
+    for (final op in ops) {
+      if (_known.contains(op.id) && !outbox.any((queued) => queued.id == op.id)) {
+        pendingRelayIds.add(op.id);
+        outbox.add(op);
+      }
+    }
   }
 
   /// 相手に送るぶんを取り出す。
@@ -143,6 +156,7 @@ class Device {
   void markSent(Iterable<Op> ops) {
     final sent = ops.map((op) => op.id).toSet();
     outbox.removeWhere((op) => sent.contains(op.id));
+    pendingRelayIds.removeAll(sent);
     // 自分のopがどこまで届いたかを覚えておく（端末に残すのは呼ぶ側）。
     for (final op in ops) {
       if (op.deviceId == id && op.lamport > _pushedThrough) _pushedThrough = op.lamport;

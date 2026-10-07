@@ -117,8 +117,12 @@ class IssueStore extends ChangeNotifier {
     if (ops.ops.isEmpty && ops.skipped > 0) {
       throw const FormatException('読める記録がありませんでした');
     }
-    final fresh = countNew(ops.ops);
+    final known = _device.log.map((op) => op.id).toSet();
+    final freshOps = ops.ops.where((op) => known.add(op.id)).toList();
+    final fresh = freshOps.length;
     receive(ops.ops);
+    _device.queueForRelay(freshOps);
+    storage?.savePendingRelayIds(_device.pendingRelayIds);
     settle();
     return fresh;
   }
@@ -143,6 +147,7 @@ class IssueStore extends ChangeNotifier {
   void markSent(Iterable<Op> ops) {
     _device.markSent(ops);
     storage?.savePushedThrough(_device.pushedThrough);
+    storage?.savePendingRelayIds(_device.pendingRelayIds);
   }
 
   /// 自分で書いた直後に呼ばれる（同期の自動送信の入口）。
@@ -367,7 +372,7 @@ class IssueStore extends ChangeNotifier {
   /// 保存から戻す。送信待ちも作り直す（自分が書いたopのうち、サーバーが確認していないもの）。
   void _restore(SavedState saved) {
     if (saved.deviceId.isNotEmpty) {
-      _device.restore(saved.ops, pushedThrough: saved.pushedThrough);
+      _device.restore(saved.ops, pushedThrough: saved.pushedThrough, pendingRelayIds: saved.pendingRelayIds);
     }
     _savedOps = _device.log.length;
     _rebuild();
