@@ -32,7 +32,11 @@ class IssueStore extends ChangeNotifier {
       clock: clock,
       householdName: householdName,
       // 一度決めた端末idは、次からもそれを使う（opのidが変わらないように）。
-      deviceId: saved == null || saved.deviceId.isEmpty ? deviceId ?? Device.newId() : saved.deviceId,
+      deviceId: saved == null || saved.deviceId.isEmpty
+          ? deviceId ?? Device.newId()
+          : saved.deviceId == 'dev' && deviceId == null
+              ? Device.newId()
+              : saved.deviceId,
       storage: storage,
       members: named,
     );
@@ -372,7 +376,20 @@ class IssueStore extends ChangeNotifier {
   /// 保存から戻す。送信待ちも作り直す（自分が書いたopのうち、サーバーが確認していないもの）。
   void _restore(SavedState saved) {
     if (saved.deviceId.isNotEmpty) {
-      _device.restore(saved.ops, pushedThrough: saved.pushedThrough, pendingRelayIds: saved.pendingRelayIds);
+      final migratingLegacyId = saved.deviceId == 'dev' && deviceId != 'dev';
+      final relayIds = <String>{
+        ...saved.pendingRelayIds,
+        if (migratingLegacyId)
+          ...saved.ops
+              .where((op) => op.deviceId == 'dev' && op.lamport > saved.pushedThrough)
+              .map((op) => op.id),
+      };
+      _device.restore(
+        saved.ops,
+        pushedThrough: saved.pushedThrough,
+        pendingRelayIds: relayIds,
+      );
+      storage?.savePendingRelayIds(_device.pendingRelayIds);
     }
     _savedOps = _device.log.length;
     _rebuild();

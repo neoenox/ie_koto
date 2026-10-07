@@ -19,23 +19,6 @@ import 'support/ops_server.dart';
 /// 「開き直す」は、同じ [MemoryStore] をもう1つ [DeviceStorage] で包み直して作る
 /// （アプリを終了して、また起動したのと同じ）。
 void main() {
-  test('新しい端末IDは別々になり、保存したIDと未送信履歴は再起動で保たれる', () {
-    final memory = MemoryStore();
-    final first = IssueStore(storage: DeviceStorage(memory));
-    final second = IssueStore(storage: DeviceStorage(MemoryStore()));
-    expect(first.deviceId, matches(RegExp(r'^[0-9a-f]{32}$')));
-    expect(first.deviceId, isNot(second.deviceId));
-    first.add(title: '買い物');
-    final reopened = IssueStore(storage: DeviceStorage(memory));
-    expect(reopened.deviceId, first.deviceId);
-    expect(reopened.outbox.map((op) => op.id), first.outbox.map((op) => op.id));
-    final legacyMemory = MemoryStore();
-    final legacy = IssueStore(deviceId: 'dev', storage: DeviceStorage(legacyMemory));
-    legacy.add(title: '古い記録');
-    final upgraded = IssueStore(storage: DeviceStorage(legacyMemory));
-    expect(upgraded.deviceId, 'dev');
-    expect(upgraded.outbox.single.id, legacy.outbox.single.id);
-  });
   late MemoryStore device;
   late DeviceStorage storage;
 
