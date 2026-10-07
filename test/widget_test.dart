@@ -165,6 +165,21 @@ void main() {
     expect(find.text('子供の靴を買う'), findsNothing);
   });
 
+  testWidgets('追加・完了・取り消しの履歴にそれぞれの操作者を表示する', (tester) async {
+    final store = IssueStore();
+    final issue = store.add(title: '操作者の確認');
+    store.setMeId('partner');
+    store.complete(issue.id);
+    store.setMeId('me');
+    store.undoComplete(issue.id);
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(issue.title));
+    await tester.pumpAndSettle();
+    expect(find.text('操作：自分'), findsNWidgets(2));
+    expect(find.text('操作：パートナー'), findsOneWidget);
+  });
+
   testWidgets('ひとこと送信は案件を完了せず、独立した完了ボタンだけが完了する', (tester) async {
     final store = IssueStore();
     final issue = store.add(title: '送信と完了の確認');

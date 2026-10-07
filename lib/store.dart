@@ -448,8 +448,6 @@ class IssueStore extends ChangeNotifier {
     return meId;
   }
 
-  String _actorOf(Op op) => op.memberId ?? meId;
-
   List<IssueEvent> _events(Task task) {
     final events = <IssueEvent>[];
     for (final op in task.history) {
@@ -459,9 +457,9 @@ class IssueStore extends ChangeNotifier {
     return events;
   }
 
-  /// op1つぶんの履歴。書いた人のmember_idがopに入っている（古いopは [meId]）。
+  /// op1つぶんの履歴。記録に操作者がない場合は推測で補完しない。
   IssueEvent? _event(Task task, Op op) {
-    final actor = _actorOf(op);
+    final actor = op.memberId;
     switch (op.kind) {
       case OpKind.add:
         final title = (op.data['title'] as String?) ?? task.title;
