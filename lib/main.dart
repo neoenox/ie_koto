@@ -48,7 +48,8 @@ class IeKotoApp extends StatefulWidget {
 
 class _IeKotoAppState extends State<IeKotoApp> {
   /// 端末に残しておいたものから開く（初回だけ、触って確かめる用のデータが入る）。
-  late final IssueStore _store = widget.store ?? IssueStore.demo(storage: widget.storage);
+  late IssueStore _store;
+  Storage? _activeStorage;
 
   /// 同期（設計の手順3）。設定が無ければ null のまま＝1人で使う形。
   SyncSession? _session;
@@ -63,7 +64,22 @@ class _IeKotoAppState extends State<IeKotoApp> {
 
     // ビルド時に渡した設定（--dart-define）が最優先。無ければ端末に残しておいたものを使う。
     final credentials = SyncConfig.resolve(widget.storage);
-    _startSession(credentials);
+    _activeStorage = _storageFor(credentials?.householdId);
+    _store = widget.store ?? IssueStore.demo(storage: _activeStorage);
+    final scopedSaved = _activeStorage?.load().sync;
+    final selected = credentials != null && scopedSaved != null &&
+            scopedSaved.baseUrl == credentials.baseUrl &&
+            scopedSaved.householdId == credentials.householdId &&
+            scopedSaved.token == credentials.token
+        ? credentials.withCursor(scopedSaved.cursor)
+        : credentials;
+    _startSession(selected);
+  }
+
+  Storage? _storageFor(String? householdId) {
+    final storage = widget.storage;
+    if (storage is DeviceStorage) return storage.scoped(householdId ?? 'solo');
+    return storage;
   }
 
   /// 同期を（再）開始する。設定がなければ1人で使う形のまま。
@@ -84,7 +100,7 @@ class _IeKotoAppState extends State<IeKotoApp> {
     final session = SyncSession(
       store: _store,
       api: api,
-      storage: widget.storage,
+      storage: _activeStorage,
       cursor: credentials.cursor,
     )..attach();
     _session = session;
@@ -93,7 +109,7 @@ class _IeKotoAppState extends State<IeKotoApp> {
 
   /// 画面で決めた設定に切り替える。保存して、セッションを作り直して、すぐ同期する。
   void _applyHousehold(HouseholdResult result) {
-    final saved = widget.storage?.load().sync;
+    final saved = _storageFor(result.householdId)?.load().sync ?? widget.storage?.load().sync;
     final credentials = HouseholdSetup.buildCredentials(
       baseUrl: result.baseUrl,
       householdId: result.householdId,
@@ -101,7 +117,11 @@ class _IeKotoAppState extends State<IeKotoApp> {
       saved: saved,
     );
     widget.storage?.saveSync(credentials);
-    setState(() => _startSession(credentials));
+    setState(() {
+      _activeStorage = _storageFor(result.householdId);
+      if (widget.store == null) _store = IssueStore.demo(storage: _activeStorage);
+      _startSession(credentials);
+    });
   }
 
   /// つながりをやめる。端末の記録は残し、同期の設定だけ消す。
@@ -109,7 +129,11 @@ class _IeKotoAppState extends State<IeKotoApp> {
     widget.storage?.saveSync(const SyncCredentials(baseUrl: '', householdId: '', token: '', cursor: 0));
     // 空の設定は「未接続」と同じ扱いにするため、保存した同期設定を消したものとして扱う。
     // DeviceStorage に削除APIが無いので、空文字で上書きしてから null として再開する。
-    setState(() => _startSession(null));
+    setState(() {
+      _activeStorage = _storageFor(null);
+      if (widget.store == null) _store = IssueStore.demo(storage: _activeStorage);
+      _startSession(null);
+    });
   }
 
   /// トークンを作り直す。古いトークンで認証し、新しいトークンに置き換える。
