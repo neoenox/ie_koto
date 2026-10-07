@@ -471,7 +471,7 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final actor = store.memberById(event.actorId)?.name;
+    final actor = store.memberById(event.actorId)?.name ?? '不明';
     final muted = event.kind == EventKind.completed || event.kind == EventKind.reopened;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -524,10 +524,9 @@ class _Timeline extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (actor != null && event.kind == EventKind.comment)
-                  Padding(
+                Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(actor, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                    child: Text('操作：$actor', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
                   ),
               ],
             ),
