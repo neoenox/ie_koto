@@ -80,7 +80,13 @@ class _IeKotoAppState extends State<IeKotoApp> {
 
   Storage? _storageFor(String? householdId) {
     final storage = widget.storage;
-    if (storage is DeviceStorage) return storage.scoped(householdId ?? 'solo');
+    if (storage is DeviceStorage) {
+      // Move the pre-scope log into the household that owned it before upgrading.
+      // Unlinked legacy data stays in the solo scope even when build-time config joins a household.
+      final previousHousehold = storage.load().sync?.householdId;
+      storage.scoped(previousHousehold?.isNotEmpty == true ? previousHousehold! : 'solo');
+      return storage.scoped(householdId ?? 'solo');
+    }
     return storage;
   }
 
