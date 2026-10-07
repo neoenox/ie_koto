@@ -196,6 +196,8 @@ export async function pushOps(db, householdId, incoming, now) {
  */
 export async function deleteHousehold(db, householdId) {
   await db.prepare('DELETE FROM share_tokens WHERE household_id = ?').bind(householdId).run();
+  await db.prepare('DELETE FROM member_aliases WHERE household_id = ?').bind(householdId).run();
+  await db.prepare('DELETE FROM members WHERE household_id = ?').bind(householdId).run();
   await db.prepare('DELETE FROM ops WHERE household_id = ?').bind(householdId).run();
   await db.prepare('DELETE FROM households WHERE id = ?').bind(householdId).run();
   return { deleted: true };

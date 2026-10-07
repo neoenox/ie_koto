@@ -50,6 +50,19 @@ void main() {
     expect(_view(b), _view(a), reason: '同じop集合なら、同じ画面になる');
   });
 
+  test('接続前の名前変更を移行先のIDへ結び、ほかの端末と共有する', () async {
+    a.renameMember('partner', 'ゆう');
+
+    await sessionA.syncNow();
+    await sessionB.syncNow();
+
+    final partnerId = a.canonicalMemberId('partner');
+    expect(partnerId, b.canonicalMemberId('partner'));
+    expect(a.memberById(partnerId)!.name, 'ゆう');
+    expect(b.memberById(partnerId)!.name, 'ゆう');
+    expect(partnerId, isNot('partner'));
+  });
+
   test('完了すると、相手にも同じ「次の1件」が出る', () async {
     a.add(title: 'お風呂そうじ', dueDate: DateTime(2026, 10, 6), recurrence: Recurrence.daily);
     await sessionA.syncNow();

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
+import '../model.dart';
 import 'log.dart';
 import 'wire.dart';
 
@@ -17,12 +18,17 @@ class SyncException implements Exception {
   final String? detail;
 
   @override
-  String toString() => 'SyncException($code${detail == null ? '' : ': $detail'})';
+  String toString() =>
+      'SyncException($code${detail == null ? '' : ': $detail'})';
 }
 
 /// 1回ぶんの受信。
 class PullPage {
-  const PullPage({required this.cursor, required this.ops, required this.skipped});
+  const PullPage({
+    required this.cursor,
+    required this.ops,
+    required this.skipped,
+  });
 
   /// 次にもらう位置（サーバー採番の挿入順）。
   final int cursor;
@@ -62,8 +68,8 @@ class SyncApi {
     http.Client? client,
     this.pageLimit,
     this.issueId,
-  })  : baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), ''),
-        _client = client ?? http.Client();
+  }) : baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), ''),
+       _client = client ?? http.Client();
 
   /// 例: `https://ie-koto.example.workers.dev`。
   final String baseUrl;
@@ -95,7 +101,9 @@ class SyncApi {
       if (pageLimit != null) 'limit': '$pageLimit',
       'issue': ?issueId,
     });
-    final body = _jsonObject(await _send(() => _client.get(uri, headers: _headers)));
+    final body = _jsonObject(
+      await _send(() => _client.get(uri, headers: _headers)),
+    );
 
     final decoded = decodeOps(body['ops']);
     final cursor = body['cursor'];
@@ -105,6 +113,76 @@ class SyncApi {
       skipped: decoded.skipped,
     );
   }
+
+  Future<MemberDirectory> migrateAndGetMembers(
+    Map<String, String> legacyNames,
+  ) async {
+    final response = await _send(
+      () => _client.post(
+        Uri.parse('$baseUrl/household/members/migrate'),
+        headers: _headers,
+        body: jsonEncode(<String, Object?>{
+          'household': householdId,
+          'legacyMembers': [
+            for (final id in const ['me', 'partner'])
+              {
+                'id': id,
+                'name': legacyNames[id] ?? (id == 'me' ? '自分' : 'パートナー'),
+              },
+          ],
+        }),
+      ),
+    );
+    return _decodeMemberDirectory(response);
+  }
+
+  Future<MemberDirectory> getMembers() async {
+    final response = await _send(
+      () => _client.get(_householdUri('/household/members'), headers: _headers),
+    );
+    return _decodeMemberDirectory(response);
+  }
+
+  Future<void> saveMember(Member member) async {
+    await _send(
+      () => _client.post(
+        Uri.parse('$baseUrl/household/members'),
+        headers: _headers,
+        body: jsonEncode(<String, Object?>{
+          'household': householdId,
+          'id': member.id,
+          'name': member.name,
+        }),
+      ),
+    );
+  }
+
+  MemberDirectory _decodeMemberDirectory(http.Response response) {
+    final body = _jsonObject(response);
+    final rawMembers = body['members'];
+    final rawAliases = body['aliases'];
+    if (rawMembers is! List || rawAliases is! Map) {
+      throw SyncException('bad_response');
+    }
+    final members = <Member>[];
+    for (final raw in rawMembers) {
+      if (raw is! Map || raw['id'] is! String || raw['name'] is! String) {
+        throw SyncException('bad_response');
+      }
+      members.add(Member(raw['id'] as String, raw['name'] as String));
+    }
+    final aliases = <String, String>{};
+    for (final entry in rawAliases.entries) {
+      if (entry.key is String && entry.value is String) {
+        aliases[entry.key as String] = entry.value as String;
+      }
+    }
+    return MemberDirectory(members: members, aliases: aliases);
+  }
+
+  Uri _householdUri(String path) => Uri.parse(
+    '$baseUrl$path',
+  ).replace(queryParameters: {'household': householdId});
 
   /// 送る。上限を超えるぶんは分けて送る。
   ///
@@ -116,12 +194,22 @@ class SyncApi {
     var accepted = 0;
     var duplicates = 0;
     for (var start = 0; start < ops.length; start += maxOpsPerPost) {
-      final batch = ops.sublist(start, math.min(start + maxOpsPerPost, ops.length));
-      final body = _jsonObject(await _send(() => _client.post(
+      final batch = ops.sublist(
+        start,
+        math.min(start + maxOpsPerPost, ops.length),
+      );
+      final body = _jsonObject(
+        await _send(
+          () => _client.post(
             _uri(const <String, String>{}),
             headers: _headers,
-            body: jsonEncode(<String, Object?>{'household': householdId, 'ops': encodeOps(batch)}),
-          )));
+            body: jsonEncode(<String, Object?>{
+              'household': householdId,
+              'ops': encodeOps(batch),
+            }),
+          ),
+        ),
+      );
       accepted += _intOf(body['accepted']);
       duplicates += _intOf(body['duplicates']);
     }
@@ -137,40 +225,54 @@ class SyncApi {
   /// トークンを作り直す。古いトークンで認証し、新しいトークンに置き換える。
   Future<void> rotateToken(String newToken) async {
     final uri = Uri.parse('$baseUrl/household/rotate');
-    await _send(() => _client.post(
-          uri,
-          headers: _headers,
-          body: jsonEncode(<String, Object?>{'household': householdId, 'token': newToken}),
-        ));
+    await _send(
+      () => _client.post(
+        uri,
+        headers: _headers,
+        body: jsonEncode(<String, Object?>{
+          'household': householdId,
+          'token': newToken,
+        }),
+      ),
+    );
   }
 
   /// Issue an expiring key that is restricted by the server to one issue.
-  Future<String> createShareToken({required String issueId, required String memberId, required DateTime expiresAt}) async {
-    final response = await _send(() => _client.post(
-      Uri.parse('$baseUrl/household/share'),
-      headers: _headers,
-      body: jsonEncode(<String, Object?>{
-        'household': householdId,
-        'issue': issueId,
-        'member': memberId,
-        'expiresAt': expiresAt.toUtc().toIso8601String(),
-      }),
-    ));
+  Future<String> createShareToken({
+    required String issueId,
+    required String memberId,
+    required DateTime expiresAt,
+  }) async {
+    final response = await _send(
+      () => _client.post(
+        Uri.parse('$baseUrl/household/share'),
+        headers: _headers,
+        body: jsonEncode(<String, Object?>{
+          'household': householdId,
+          'issue': issueId,
+          'member': memberId,
+          'expiresAt': expiresAt.toUtc().toIso8601String(),
+        }),
+      ),
+    );
     final body = _jsonObject(response);
     final token = body['token'];
-    if (token is! String || token.length < 32) throw SyncException('bad_response');
+    if (token is! String || token.length < 32) {
+      throw SyncException('bad_response');
+    }
     return token;
   }
 
   void close() => _client.close();
 
   Map<String, String> get _headers => <String, String>{
-        'authorization': 'Bearer $token',
-        'content-type': 'application/json; charset=utf-8',
-      };
+    'authorization': 'Bearer $token',
+    'content-type': 'application/json; charset=utf-8',
+  };
 
-  Uri _uri(Map<String, String> query) =>
-      Uri.parse('$baseUrl/ops').replace(queryParameters: query.isEmpty ? null : query);
+  Uri _uri(Map<String, String> query) => Uri.parse(
+    '$baseUrl/ops',
+  ).replace(queryParameters: query.isEmpty ? null : query);
 
   Future<http.Response> _send(Future<http.Response> Function() send) async {
     final http.Response response;
@@ -186,11 +288,18 @@ class SyncApi {
     }
 
     if (response.statusCode == 401) throw SyncException('unauthorized');
-    if (response.statusCode >= 500) throw SyncException('server', '${response.statusCode}');
-    if (response.statusCode >= 400) {
-      throw SyncException('bad_request', '${response.statusCode} ${_text(response)}');
+    if (response.statusCode >= 500) {
+      throw SyncException('server', '${response.statusCode}');
     }
-    if (response.statusCode != 200) throw SyncException('bad_response', '${response.statusCode}');
+    if (response.statusCode >= 400) {
+      throw SyncException(
+        'bad_request',
+        '${response.statusCode} ${_text(response)}',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw SyncException('bad_response', '${response.statusCode}');
+    }
     return response;
   }
 
@@ -199,12 +308,17 @@ class SyncApi {
     try {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is Map) {
-        return <String, Object?>{for (final entry in decoded.entries) '${entry.key}': entry.value};
+        return <String, Object?>{
+          for (final entry in decoded.entries) '${entry.key}': entry.value,
+        };
       }
     } catch (_) {
       // 下で bad_response にする。
     }
-    throw SyncException('bad_response', '${response.statusCode} ${_text(response)}');
+    throw SyncException(
+      'bad_response',
+      '${response.statusCode} ${_text(response)}',
+    );
   }
 
   String _text(http.Response response) {

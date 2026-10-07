@@ -38,6 +38,23 @@ void main() {
     }
   });
 
+  testWidgets('世帯設定から新しいメンバーを追加できる', (tester) async {
+    final store = IssueStore();
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('household-open')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('人を追加'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'あき');
+    await tester.tap(find.widgetWithText(FilledButton, '追加').last);
+    await tester.pumpAndSettle();
+
+    expect(store.members, hasLength(3));
+    expect(store.members.last.name, 'あき');
+    expect(store.members.last.id, startsWith('mem_'));
+  });
+
   testWidgets('追加はタイトルだけでできる', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('追加'));

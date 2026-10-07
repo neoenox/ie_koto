@@ -6,7 +6,7 @@ import worker from '../src/index.js';
 import { createD1 } from './d1.mjs';
 
 /**
- * Worker の4本のAPI（GET /ops、POST /ops、DELETE /ops、POST /household/rotate）を、本物の SQL で確かめる。
+ * Worker APIs are exercised against the real SQLite schema.
  * 使っているのは schema.sql と src/ そのもの。差し替えているのは D1 だけ（test/d1.mjs）。
  */
 
@@ -382,8 +382,62 @@ test('CORSの前置きに答える（開発中は別のポートから叩くた�
   });
   assert.equal(preflight.status, 204);
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'http://127.0.0.1:8080');
-  assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, POST, DELETE, OPTIONS');
+  assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, POST, PUT, DELETE, OPTIONS');
 
   const reply = await get(env);
   assert.equal(reply.headers.get('access-control-allow-origin'), '*', 'Originが無ければ * で返す');
+});
+
+test('me/partnerを同じ世帯内で一度だけ安定IDへ移行し、メンバー追加と改名を共有する', async () => {
+  const { env, db } = newEnv();
+  const migrate = async (names) => call(env, '/household/members/migrate', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ household: HOME, legacyMembers: names }),
+  });
+  const first = await migrate([{ id: 'me', name: 'あき' }, { id: 'partner', name: 'ゆう' }]);
+  assert.equal(first.status, 200);
+  assert.match(first.body.aliases.me, /^mem_[a-f0-9]{32}$/);
+  assert.match(first.body.aliases.partner, /^mem_[a-f0-9]{32}$/);
+  assert.notEqual(first.body.aliases.me, first.body.aliases.partner);
+  assert.deepEqual(first.body.members.map((m) => m.name), ['あき', 'ゆう']);
+
+  const second = await migrate([{ id: 'me', name: '別の端末の自分' }, { id: 'partner', name: '別名' }]);
+  assert.deepEqual(second.body.aliases, first.body.aliases);
+  assert.deepEqual(second.body.members, first.body.members);
+
+  const addedId = `mem_${'a'.repeat(32)}`;
+  const added = await call(env, '/household/members', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ household: HOME, id: addedId, name: '子ども' }),
+  });
+  assert.equal(added.status, 200);
+  const fetched = await call(env, `/household/members?household=${HOME}`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+  assert.equal(fetched.body.members.length, 3);
+
+  const denied = await call(env, `/household/members?household=${HOME}`, {
+    headers: { authorization: `Bearer ${OTHER_TOKEN}` },
+  });
+  assert.equal(denied.status, 401);
+  assert.equal(Number(db.prepare('SELECT count(*) AS n FROM member_aliases').get().n), 2);
+});
+
+test('既存のmembers行もIDを維持して対応表に移す', async () => {
+  const { env, db } = newEnv();
+  db.prepare('INSERT INTO members (household_id, member_id, display_name) VALUES (?, ?, ?)')
+    .run(HOME, 'me', 'あき');
+  db.prepare('INSERT INTO members (household_id, member_id, display_name) VALUES (?, ?, ?)')
+    .run(HOME, 'partner', 'ゆう');
+  const response = await call(env, '/household/members/migrate', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ household: HOME, legacyMembers: [] }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.members.map((member) => member.name), ['あき', 'ゆう']);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM members WHERE household_id = ? AND member_id IN (?, ?)')
+    .get(HOME, 'me', 'partner').n, 0);
 });

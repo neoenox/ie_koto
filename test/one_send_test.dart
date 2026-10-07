@@ -93,7 +93,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('リンクを送る'), findsNothing);
-    expect(find.text('名前を直す'), findsOneWidget, reason: 'ほかの項目はこれまでどおり');
+    expect(find.text('名前を変更'), findsOneWidget, reason: 'ほかの項目はこれまでどおり');
     expect(copied, isEmpty);
   });
 }

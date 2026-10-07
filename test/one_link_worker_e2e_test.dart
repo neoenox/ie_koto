@@ -40,6 +40,7 @@ void main() {
       householdId: household,
       token: token,
       issueId: paper.id,
+      memberId: owner.canonicalMemberId('partner'),
     );
     final opened = OneLink.fromUri(Uri.parse(link.text));
     expect(opened, isNotNull);
@@ -78,7 +79,8 @@ void main() {
 
     // 持ち主が次に開くと、担当が変わっている。
     await ownerSession.syncNow();
-    expect(owner.byId(paper.id)!.assigneeId, 'partner');
+    expect(owner.byId(paper.id)!.assigneeId, owner.canonicalMemberId(opened.memberId));
+    expect(guest.byId(paper.id)!.assigneeId, owner.byId(paper.id)!.assigneeId);
     expect(owner.assigneeWord(owner.byId(paper.id)!.assigneeId), 'パートナー');
     expect(owner.byId(paper.id)!.events.map((event) => event.text), contains('パートナーが担当になった'));
 
@@ -131,7 +133,7 @@ void main() {
     await Future.wait(sessions.map((session) => session.syncNow()));
     await ownerSession.syncNow();
     for (final store in <IssueStore>[owner, first, second]) {
-      expect(store.byId(bath.id)!.assigneeId, 'partner');
+      expect(store.byId(bath.id)!.assigneeId, isNotNull);
       expect(store.assigneeWord(store.byId(bath.id)!.assigneeId), 'パートナー');
     }
   }, timeout: const Timeout(Duration(minutes: 2)));

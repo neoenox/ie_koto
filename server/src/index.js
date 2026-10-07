@@ -1,6 +1,6 @@
 /**
  * いえこと の同期サーバー。opの出し入れは2本（docs/SYNC_DESIGN.md §3）に、
- * 世帯の始末2本（削除・トークン作り直し）を足した計4本。
+ * 世帯の始末とメンバー一覧・移行を扱う。
  *
  *   GET  /ops?household=<id>&since=<cursor>   増分をもらう
  *   POST /ops                                 自分の op を送る
@@ -40,7 +40,8 @@ export default {
     const cors = corsHeaders(request, env);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-    if (url.pathname !== '/ops' && url.pathname !== '/household/rotate' && url.pathname !== '/household/share') {
+    if (url.pathname !== '/ops' && url.pathname !== '/household/rotate' && url.pathname !== '/household/share' &&
+        url.pathname !== '/household/members/migrate' && url.pathname !== '/household/members') {
       return json({ error: 'not_found' }, 404, cors);
     }
 
@@ -48,6 +49,15 @@ export default {
       if (url.pathname === '/household/rotate') {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
         return await handleRotate(request, env, cors);
+      }
+      if (url.pathname === '/household/members/migrate') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
+        return await handleMemberMigration(request, env, cors);
+      }
+      if (url.pathname === '/household/members') {
+        if (request.method === 'GET') return await handleGetMembers(request, env, url, cors);
+        if (request.method === 'POST') return await handleSaveMember(request, env, cors);
+        return json({ error: 'method_not_allowed' }, 405, cors);
       }
       if (url.pathname === '/household/share') {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
@@ -63,6 +73,83 @@ export default {
     }
   },
 };
+
+/** Upgrade fixed legacy ids once; the resulting aliases are shared by the household. */
+async function handleMemberMigration(request, env, cors) {
+  const token = bearerToken(request);
+  const raw = await readJson(request);
+  if (!token) return json({ error: 'unauthorized' }, 401, cors);
+  if (!raw || typeof raw.household !== 'string' || !HOUSEHOLD_ID.test(raw.household)) {
+    return json({ error: 'bad_household' }, 400, cors);
+  }
+  const candidates = Array.isArray(raw.legacyMembers) ? raw.legacyMembers : [];
+  if (candidates.length > 8 || candidates.some((m) => !m || !['me', 'partner'].includes(m.id) ||
+      typeof m.name !== 'string' || !m.name.trim() || m.name.length > 80)) {
+    return json({ error: 'bad_members' }, 400, cors);
+  }
+  const db = env.DB;
+  const household = raw.household;
+  const now = new Date().toISOString();
+  if (!await ensureHousehold(db, household, await hashToken(token), now)) {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  for (const legacyId of ['me', 'partner']) {
+    const old = await db.prepare('SELECT display_name FROM members WHERE household_id = ? AND member_id = ?')
+      .bind(household, legacyId).first();
+    const candidate = candidates.find((m) => m.id === legacyId);
+    const name = old?.display_name || candidate?.name.trim() || (legacyId === 'me' ? '自分' : 'パートナー');
+    const proposed = 'mem_' + crypto.randomUUID().replaceAll('-', '');
+    await db.prepare('INSERT OR IGNORE INTO member_aliases (household_id, legacy_id, member_id) VALUES (?, ?, ?)')
+      .bind(household, legacyId, proposed).run();
+    const alias = await db.prepare('SELECT member_id FROM member_aliases WHERE household_id = ? AND legacy_id = ?')
+      .bind(household, legacyId).first();
+    await db.prepare('INSERT OR IGNORE INTO members (household_id, member_id, display_name) VALUES (?, ?, ?)')
+      .bind(household, alias.member_id, name).run();
+    await db.prepare('DELETE FROM members WHERE household_id = ? AND member_id = ?')
+      .bind(household, legacyId).run();
+  }
+  return await memberDirectory(db, household, cors);
+}
+
+async function handleGetMembers(request, env, url, cors) {
+  const token = bearerToken(request);
+  const household = url.searchParams.get('household') ?? '';
+  if (!token) return json({ error: 'unauthorized' }, 401, cors);
+  if (!HOUSEHOLD_ID.test(household)) return json({ error: 'bad_household' }, 400, cors);
+  if (!await ensureHousehold(env.DB, household, await hashToken(token), new Date().toISOString())) {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  return await memberDirectory(env.DB, household, cors);
+}
+
+async function handleSaveMember(request, env, cors) {
+  const token = bearerToken(request);
+  const raw = await readJson(request);
+  if (!token) return json({ error: 'unauthorized' }, 401, cors);
+  if (!raw || typeof raw.household !== 'string' || !HOUSEHOLD_ID.test(raw.household) ||
+      typeof raw.id !== 'string' || !/^mem_[A-Za-z0-9_-]{16,48}$/.test(raw.id) ||
+      typeof raw.name !== 'string' || !raw.name.trim() || raw.name.trim().length > 80) {
+    return json({ error: 'bad_member' }, 400, cors);
+  }
+  const db = env.DB;
+  if (!await ensureHousehold(db, raw.household, await hashToken(token), new Date().toISOString())) {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  await db.prepare('INSERT INTO members (household_id, member_id, display_name) VALUES (?, ?, ?) ON CONFLICT(household_id, member_id) DO UPDATE SET display_name = excluded.display_name')
+    .bind(raw.household, raw.id, raw.name.trim()).run();
+  return json({ id: raw.id, name: raw.name.trim() }, 200, cors);
+}
+
+async function memberDirectory(db, household, cors) {
+  const rows = await db.prepare('SELECT member_id AS id, display_name AS name FROM members WHERE household_id = ? ORDER BY rowid')
+    .bind(household).all();
+  const aliases = await db.prepare('SELECT legacy_id, member_id FROM member_aliases WHERE household_id = ?')
+    .bind(household).all();
+  return json({
+    members: rows.results ?? [],
+    aliases: Object.fromEntries((aliases.results ?? []).map((a) => [a.legacy_id, a.member_id])),
+  }, 200, cors);
+}
 
 /** `GET /ops?household=<id>&since=<cursor>[&limit=<n>][&issue=<id>]` */
 async function handlePull(request, env, url, cors) {
@@ -311,7 +398,7 @@ function corsHeaders(request, env) {
   const allowed = (env && env.ALLOWED_ORIGIN) || request.headers.get('origin') || '*';
   return {
     'access-control-allow-origin': allowed,
-    'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'access-control-allow-headers': 'authorization, content-type',
     'access-control-max-age': '86400',
     vary: 'origin',

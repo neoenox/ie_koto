@@ -6,10 +6,10 @@ enum IssueStatus { open, doing, waiting, done }
 extension IssueStatusWords on IssueStatus {
   /// 画面で見せる言葉はこれだけ。仕事の用語（チケット／ステータス／優先度）は使わない。
   String get word => switch (this) {
-        IssueStatus.open || IssueStatus.doing => 'やること',
-        IssueStatus.waiting => '対応待ち',
-        IssueStatus.done => 'おわった',
-      };
+    IssueStatus.open || IssueStatus.doing => 'やること',
+    IssueStatus.waiting => '対応待ち',
+    IssueStatus.done => 'おわった',
+  };
 }
 
 /// くりかえし。家事では「○日ごと（終わってから）」の方が自然なことが多い。
@@ -39,7 +39,8 @@ class Recurrence {
   factory Recurrence.onWeekdays(Set<int> days) =>
       Recurrence._(RecurrenceKind.weekdays, weekdays: Set.unmodifiable(days));
 
-  factory Recurrence.every(int days, {bool fromCompletion = true}) => Recurrence._(
+  factory Recurrence.every(int days, {bool fromCompletion = true}) =>
+      Recurrence._(
         RecurrenceKind.everyDays,
         everyDays: days,
         fromCompletion: fromCompletion,
@@ -109,7 +110,17 @@ DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
 DateTime _addDays(DateTime d, int n) => DateTime(d.year, d.month, d.day + n);
 
-enum EventKind { created, comment, photo, assignee, due, recurrence, status, completed, reopened }
+enum EventKind {
+  created,
+  comment,
+  photo,
+  assignee,
+  due,
+  recurrence,
+  status,
+  completed,
+  reopened,
+}
 
 /// Issueの履歴。UIでは「家族のタイムライン」として出す。
 @immutable
@@ -168,4 +179,12 @@ class Member {
   final String name;
 
   const Member(this.id, this.name);
+}
+
+/// A household-shared roster and aliases used only to read legacy operation ids.
+class MemberDirectory {
+  final List<Member> members;
+  final Map<String, String> aliases;
+
+  const MemberDirectory({required this.members, required this.aliases});
 }
