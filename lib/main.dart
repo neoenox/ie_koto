@@ -65,7 +65,9 @@ class _IeKotoAppState extends State<IeKotoApp> {
     // ビルド時に渡した設定（--dart-define）が最優先。無ければ端末に残しておいたものを使う。
     final credentials = SyncConfig.resolve(widget.storage);
     _activeStorage = _storageFor(credentials?.householdId);
-    _store = widget.store ?? IssueStore.demo(storage: _activeStorage);
+    _store = widget.store ?? (credentials == null
+        ? IssueStore.demo(storage: _activeStorage)
+        : IssueStore(storage: _activeStorage));
     final scopedSaved = _activeStorage?.load().sync;
     final selected = credentials != null && scopedSaved != null &&
             scopedSaved.baseUrl == credentials.baseUrl &&
@@ -119,7 +121,7 @@ class _IeKotoAppState extends State<IeKotoApp> {
     widget.storage?.saveSync(credentials);
     setState(() {
       _activeStorage = _storageFor(result.householdId);
-      if (widget.store == null) _store = IssueStore.demo(storage: _activeStorage);
+      if (widget.store == null) _store = IssueStore(storage: _activeStorage);
       _startSession(credentials);
     });
   }
