@@ -21,10 +21,12 @@ class IssueStore extends ChangeNotifier {
     Storage? storage,
     List<Member>? members,
     String? initialMeId,
+    Map<String, String> legacyMemberAliases = const {},
   }) {
     final saved = storage?.load();
-    final base = members ?? const [Member('me', '自分'), Member('partner', 'パートナー')];
-    // 端末ローカルの表示名を重ねる（同期しない）。
+    final base =
+        members ?? const [Member('me', '自分'), Member('partner', 'パートナー')];
+    // 保存済みの世帯名を一時表示し、接続後に共有名簿で更新する。
     final named = [
       for (final m in base) Member(m.id, saved?.memberNames[m.id] ?? m.name),
     ];
@@ -35,15 +37,19 @@ class IssueStore extends ChangeNotifier {
       deviceId: saved == null || saved.deviceId.isEmpty
           ? deviceId ?? Device.newId()
           : saved.deviceId == 'dev' && deviceId == null
-              ? Device.newId()
-              : saved.deviceId,
+          ? Device.newId()
+          : saved.deviceId,
       storage: storage,
       members: named,
+      legacyMemberAliases: legacyMemberAliases,
+      pendingMemberNames: Map<String, String>.of(
+        saved?.pendingMemberNames ?? const {},
+      ),
     );
     if (initialMeId != null && initialMeId.isNotEmpty) {
-      store.meId = initialMeId;
+      store.meId = store.canonicalMemberId(initialMeId);
     } else if (saved != null && saved.meId.isNotEmpty) {
-      store.meId = saved.meId;
+      store.meId = store.canonicalMemberId(saved.meId);
     }
     store._restore(saved ?? const SavedState());
     return store;
@@ -55,8 +61,11 @@ class IssueStore extends ChangeNotifier {
     required this.deviceId,
     required this.storage,
     required this.members,
-  })  : _device = Device(deviceId),
-        _clock = clock ?? DateTime.now {
+    required Map<String, String> legacyMemberAliases,
+    required this.pendingMemberNames,
+  }) : legacyMemberAliases = Map<String, String>.of(legacyMemberAliases),
+       _device = Device(deviceId),
+       _clock = clock ?? DateTime.now {
     // 初回起動で決まった端末idを、その場で残す。
     storage?.saveDeviceId(deviceId);
   }
@@ -84,12 +93,17 @@ class IssueStore extends ChangeNotifier {
 
   final String householdName;
 
-  /// 参加者の一覧。表示名の変更は端末ローカルで持つ（同期しない）。
+  /// 世帯メンバー。表示名は世帯で共有する。
   final List<Member> members;
   String meId = 'me';
+  final Map<String, String> legacyMemberAliases;
+  final Map<String, String> pendingMemberNames;
+
+  Future<void> Function(Member member)? onMemberWrite;
 
   /// この端末を使う人を変える。端末に残る（同期しない）。
   void setMeId(String id) {
+    id = canonicalMemberId(id);
     if (id.isEmpty || id == meId) return;
     meId = id;
     if (!members.any((m) => m.id == id)) {
@@ -100,8 +114,9 @@ class IssueStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 表示名を変える。端末に残る（同期しない）。
+  /// 表示名を変え、オフライン時は送信待ちとして端末に残す。
   void renameMember(String id, String name) {
+    id = canonicalMemberId(id);
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
     final index = members.indexWhere((m) => m.id == id);
@@ -109,7 +124,93 @@ class IssueStore extends ChangeNotifier {
     if (members[index].name == trimmed) return;
     members[index] = Member(id, trimmed);
     storage?.saveMemberNames({for (final m in members) m.id: m.name});
+    _markMemberPending(members[index]);
     notifyListeners();
+  }
+
+  Member addMember(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError.value(name, 'name', '名前を入れてください');
+    final member = Member('mem_${Device.newId()}', trimmed);
+    members.add(member);
+    storage?.saveMemberNames({for (final m in members) m.id: m.name});
+    _markMemberPending(member);
+    notifyListeners();
+    return member;
+  }
+
+  void _markMemberPending(Member member) {
+    pendingMemberNames[member.id] = member.name;
+    storage?.savePendingMemberNames(pendingMemberNames);
+    onMemberWrite?.call(member);
+  }
+
+  void markMemberSynced(String id) {
+    pendingMemberNames.remove(id);
+    storage?.savePendingMemberNames(pendingMemberNames);
+  }
+
+  Map<String, String> get legacyMemberNames => {
+    for (final id in const ['me', 'partner'])
+      if (memberById(id) != null) id: memberById(id)!.name,
+  };
+
+  String canonicalMemberId(String id) => legacyMemberAliases[id] ?? id;
+
+  void applyMemberDirectory(MemberDirectory directory) {
+    applyMemberAliases(directory.aliases);
+    members
+      ..clear()
+      ..addAll(directory.members);
+    if (members.isEmpty) members.add(Member(meId, '自分'));
+    if (!members.any((member) => member.id == meId)) {
+      members.add(Member(meId, '自分'));
+    }
+    storage?.saveMemberNames({
+      for (final member in members) member.id: member.name,
+    });
+    _rebuild();
+    notifyListeners();
+  }
+
+  void applyMemberAliases(Map<String, String> aliases) {
+    final oldMembers = List<Member>.of(members);
+    final previousMe = meId;
+    legacyMemberAliases
+      ..clear()
+      ..addAll(aliases);
+    meId = canonicalMemberId(previousMe);
+    for (final member in oldMembers) {
+      final canonicalId = canonicalMemberId(member.id);
+      final defaultName = member.id == 'me'
+          ? '自分'
+          : member.id == 'partner'
+          ? 'パートナー'
+          : null;
+      if (defaultName != null && member.name != defaultName) {
+        pendingMemberNames[canonicalId] = member.name;
+      }
+    }
+    members
+      ..clear()
+      ..addAll(
+        {
+          for (final member in oldMembers)
+            canonicalMemberId(member.id): Member(
+              canonicalMemberId(member.id),
+              member.name,
+            ),
+        }.values,
+      );
+    final pending = Map<String, String>.of(pendingMemberNames);
+    pendingMemberNames
+      ..clear()
+      ..addAll({
+        for (final entry in pending.entries)
+          canonicalMemberId(entry.key): entry.value,
+      });
+    storage?.savePendingMemberNames(pendingMemberNames);
+    storage?.saveMeId(meId);
   }
 
   /// 記録の引っ越し用。持っているopをJSON配列で書き出す。
@@ -191,6 +292,7 @@ class IssueStore extends ChangeNotifier {
 
   Member? memberById(String? id) {
     if (id == null) return null;
+    id = canonicalMemberId(id);
     for (final m in members) {
       if (m.id == id) return m;
     }
@@ -200,19 +302,25 @@ class IssueStore extends ChangeNotifier {
   /// 画面に出す名前。担当なしは「だれでも」。
   /// 既定の呼び名はこの端末の利用者から見た関係で表示する。
   String? memberLabel(String? id) {
+    if (id == null) return null;
+    id = canonicalMemberId(id);
     final member = memberById(id);
     if (member == null) return null;
-    final isDefault = (id == 'me' && member.name == '自分') ||
-        (id == 'partner' && member.name == 'パートナー');
-    if (isDefault && (meId == 'me' || meId == 'partner')) {
-      return id == meId ? '自分' : 'パートナー';
+    String? legacyId;
+    for (final entry in legacyMemberAliases.entries) {
+      if (entry.value == id) legacyId = entry.key;
     }
-    return member.name;
+    final isDefaultAlias =
+        ((id == 'me' || legacyId == 'me') && member.name == '自分') ||
+        ((id == 'partner' || legacyId == 'partner') && member.name == 'パートナー');
+    if (isDefaultAlias) return id == meId ? '自分' : 'パートナー';
+    return id == meId ? '自分' : member.name;
   }
 
   String assigneeWord(String? id) => memberLabel(id) ?? 'だれでも';
 
-  bool _isTodayDue(Issue i) => i.dueDate != null && !_day(i.dueDate!).isAfter(today);
+  bool _isTodayDue(Issue i) =>
+      i.dueDate != null && !_day(i.dueDate!).isAfter(today);
 
   int _todayOrder(Issue a, Issue b) => a.dueDate!.compareTo(b.dueDate!);
 
@@ -225,23 +333,28 @@ class IssueStore extends ChangeNotifier {
   }
 
   /// 今日やるもの。期限が今日以前のものだけ。自分の担当かどうかは問わない。
-  List<Issue> get todayQueue => _queue((i) => !i.isDone && _isTodayDue(i), _todayOrder);
+  List<Issue> get todayQueue =>
+      _queue((i) => !i.isDone && _isTodayDue(i), _todayOrder);
 
   /// あとで。期限がないもの、先のもの。
-  List<Issue> get laterQueue => _queue((i) => !i.isDone && !_isTodayDue(i), _laterOrder);
+  List<Issue> get laterQueue =>
+      _queue((i) => !i.isDone && !_isTodayDue(i), _laterOrder);
 
   /// 画面に出す「今日」の行。完了した直後のものも、元の並びの位置に残す。
-  List<Issue> get todayRows => _queue((i) => _showsInList(i) && _isTodayDue(i), _todayOrder);
+  List<Issue> get todayRows =>
+      _queue((i) => _showsInList(i) && _isTodayDue(i), _todayOrder);
 
   /// 画面に出す「あとで」の行。完了した直後のものも、元の並びの位置に残す。
-  List<Issue> get laterRows => _queue((i) => _showsInList(i) && !_isTodayDue(i), _laterOrder);
+  List<Issue> get laterRows =>
+      _queue((i) => _showsInList(i) && !_isTodayDue(i), _laterOrder);
 
   bool _showsInList(Issue i) => !i.isDone || _remaining(i) != null;
 
   List<Issue> get openIssues => [...todayQueue, ...laterQueue];
 
   /// 完了した直後だけ、薄く残して取り消せるようにする。
-  List<Issue> get justDone => _issues.where((i) => i.isDone && _remaining(i) != null).toList();
+  List<Issue> get justDone =>
+      _issues.where((i) => i.isDone && _remaining(i) != null).toList();
 
   /// これまでおわったもの（新しい順）。詳細の前回・前々回とは別に、後から探す用。
   List<Issue> get doneHistory {
@@ -268,7 +381,11 @@ class IssueStore extends ChangeNotifier {
 
   /// 同じ定期案件の、これまでの完了（新しい順）。
   List<Issue> seriesHistory(String seriesKey) {
-    final list = _issues.where((i) => i.seriesKey == seriesKey && i.isDone && i.completedAt != null).toList();
+    final list = _issues
+        .where(
+          (i) => i.seriesKey == seriesKey && i.isDone && i.completedAt != null,
+        )
+        .toList();
     list.sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
     return list;
   }
@@ -291,16 +408,28 @@ class IssueStore extends ChangeNotifier {
     final due = dueDate == null ? null : _day(dueDate);
 
     _commit(() {
-      _device.write(OpKind.add, issueId, at: createdAt, memberId: meId, data: <String, Object?>{
-        'title': trimmed,
-        'assigneeId': assigneeId,
-        'dueDate': due,
-        'recurrence': recurrence,
-        // 追加の時点で必ず決めて、次の1件へ引き継ぐ。
-        'seriesId': issueId,
-      });
+      _device.write(
+        OpKind.add,
+        issueId,
+        at: createdAt,
+        memberId: meId,
+        data: <String, Object?>{
+          'title': trimmed,
+          'assigneeId': assigneeId,
+          'dueDate': due,
+          'recurrence': recurrence,
+          // 追加の時点で必ず決めて、次の1件へ引き継ぐ。
+          'seriesId': issueId,
+        },
+      );
       if (status != IssueStatus.open) {
-        _device.write(OpKind.status, issueId, at: createdAt, memberId: meId, data: <String, Object?>{'status': status});
+        _device.write(
+          OpKind.status,
+          issueId,
+          at: createdAt,
+          memberId: meId,
+          data: <String, Object?>{'status': status},
+        );
       }
     });
     return byId(issueId)!;
@@ -322,23 +451,41 @@ class IssueStore extends ChangeNotifier {
 
   void setAssignee(String id, String? memberId) {
     if (byId(id) == null) return;
-    _commit(() => _device.write(OpKind.assignee, id, at: now, memberId: meId, data: <String, Object?>{'assigneeId': memberId}));
+    _commit(
+      () => _device.write(
+        OpKind.assignee,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'assigneeId': memberId},
+      ),
+    );
   }
 
   void setDue(String id, DateTime? due) {
     if (byId(id) == null) return;
-    _commit(() => _device.write(
-          OpKind.due,
-          id,
-          at: now,
-          memberId: meId,
-          data: <String, Object?>{'dueDate': due == null ? null : _day(due)},
-        ));
+    _commit(
+      () => _device.write(
+        OpKind.due,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'dueDate': due == null ? null : _day(due)},
+      ),
+    );
   }
 
   void setRecurrence(String id, Recurrence recurrence) {
     if (byId(id) == null) return;
-    _commit(() => _device.write(OpKind.recurrence, id, at: now, memberId: meId, data: <String, Object?>{'recurrence': recurrence}));
+    _commit(
+      () => _device.write(
+        OpKind.recurrence,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'recurrence': recurrence},
+      ),
+    );
   }
 
   void setStatus(String id, IssueStatus status) {
@@ -354,20 +501,42 @@ class IssueStore extends ChangeNotifier {
         _device.write(OpKind.reopen, id, at: now, memberId: meId);
         if (status == IssueStatus.open) return;
       }
-      _device.write(OpKind.status, id, at: now, memberId: meId, data: <String, Object?>{'status': status});
+      _device.write(
+        OpKind.status,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'status': status},
+      );
     });
   }
 
   void rename(String id, String title) {
     final trimmed = title.trim();
     if (trimmed.isEmpty || byId(id) == null) return;
-    _commit(() => _device.write(OpKind.rename, id, at: now, memberId: meId, data: <String, Object?>{'title': trimmed}));
+    _commit(
+      () => _device.write(
+        OpKind.rename,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'title': trimmed},
+      ),
+    );
   }
 
   void comment(String id, String text) {
     final t = text.trim();
     if (t.isEmpty || byId(id) == null) return;
-    _commit(() => _device.write(OpKind.comment, id, at: now, memberId: meId, data: <String, Object?>{'text': t}));
+    _commit(
+      () => _device.write(
+        OpKind.comment,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'text': t},
+      ),
+    );
   }
 
   void remove(String id) {
@@ -394,7 +563,10 @@ class IssueStore extends ChangeNotifier {
         ...saved.pendingRelayIds,
         if (migratingLegacyId)
           ...saved.ops
-              .where((op) => op.deviceId == 'dev' && op.lamport > saved.pushedThrough)
+              .where(
+                (op) =>
+                    op.deviceId == 'dev' && op.lamport > saved.pushedThrough,
+              )
               .map((op) => op.id),
       };
       _device.restore(
@@ -435,7 +607,9 @@ class IssueStore extends ChangeNotifier {
       title: task.title,
       createdAt: _createdAt(task),
       reporterId: _createdBy(task),
-      assigneeId: task.assigneeId,
+      assigneeId: task.assigneeId == null
+          ? null
+          : canonicalMemberId(task.assigneeId!),
       dueDate: task.dueDate,
       recurrence: task.recurrence,
       status: task.status,
@@ -451,14 +625,16 @@ class IssueStore extends ChangeNotifier {
     for (final op in task.history) {
       if (op.kind == OpKind.add) return op.at;
     }
-    return task.history.isEmpty ? DateTime.fromMillisecondsSinceEpoch(0) : task.history.first.at;
+    return task.history.isEmpty
+        ? DateTime.fromMillisecondsSinceEpoch(0)
+        : task.history.first.at;
   }
 
   String _createdBy(Task task) {
     for (final op in task.history) {
       if (op.kind == OpKind.add && op.memberId != null) return op.memberId!;
     }
-    return meId;
+    return canonicalMemberId(meId);
   }
 
   List<IssueEvent> _events(Task task) {
@@ -472,7 +648,7 @@ class IssueStore extends ChangeNotifier {
 
   /// op1つぶんの履歴。記録に操作者がない場合は推測で補完しない。
   IssueEvent? _event(Task task, Op op) {
-    final actor = op.memberId;
+    final actor = op.memberId == null ? null : canonicalMemberId(op.memberId!);
     switch (op.kind) {
       case OpKind.add:
         final title = (op.data['title'] as String?) ?? task.title;
@@ -502,28 +678,54 @@ class IssueStore extends ChangeNotifier {
           text: due == null ? '期限を消した' : '${due.month}/${due.day}にした',
         );
       case OpKind.recurrence:
-        final recurrence = (op.data['recurrence'] as Recurrence?) ?? Recurrence.none;
-        return IssueEvent(EventKind.recurrence, op.at, actorId: actor, text: '${recurrence.label}にした');
+        final recurrence =
+            (op.data['recurrence'] as Recurrence?) ?? Recurrence.none;
+        return IssueEvent(
+          EventKind.recurrence,
+          op.at,
+          actorId: actor,
+          text: '${recurrence.label}にした',
+        );
       case OpKind.status:
         final status = op.data['status'] as IssueStatus?;
         if (status == null || status == IssueStatus.done) return null;
-        return IssueEvent(EventKind.status, op.at, actorId: actor, text: '${status.word}にした');
+        return IssueEvent(
+          EventKind.status,
+          op.at,
+          actorId: actor,
+          text: '${status.word}にした',
+        );
       case OpKind.comment:
         final text = op.data['text'] as String?;
         if (text == null || text.isEmpty) return null;
         return IssueEvent(EventKind.comment, op.at, actorId: actor, text: text);
       case OpKind.complete:
-        return IssueEvent(EventKind.completed, op.at, actorId: actor, text: 'おわった');
+        return IssueEvent(
+          EventKind.completed,
+          op.at,
+          actorId: actor,
+          text: 'おわった',
+        );
       case OpKind.reopen:
-        return IssueEvent(EventKind.reopened, op.at, actorId: actor, text: 'もどした');
+        return IssueEvent(
+          EventKind.reopened,
+          op.at,
+          actorId: actor,
+          text: 'もどした',
+        );
       case OpKind.delete:
         return null;
     }
   }
 
   /// 絞り込んで並べる。同じ条件のときは、作られた順（opの順）で安定させる。
-  List<Issue> _queue(bool Function(Issue) keep, int Function(Issue, Issue) compare) {
-    final order = <String, int>{for (var i = 0; i < _issues.length; i++) _issues[i].id: i};
+  List<Issue> _queue(
+    bool Function(Issue) keep,
+    int Function(Issue, Issue) compare,
+  ) {
+    final order = <String, int>{
+      for (var i = 0; i < _issues.length; i++) _issues[i].id: i,
+    };
     final list = _issues.where(keep).toList();
     list.sort((a, b) {
       final result = compare(a, b);
@@ -537,7 +739,9 @@ class IssueStore extends ChangeNotifier {
   factory IssueStore.demo({DateTime Function()? clock, Storage? storage}) {
     // 2回目以降は、端末に残しておいたものをそのまま開く（デモを入れ直さない）。
     final saved = storage?.load();
-    if (saved != null && saved.ops.isNotEmpty) return IssueStore(clock: clock, storage: storage);
+    if (saved != null && saved.ops.isNotEmpty) {
+      return IssueStore(clock: clock, storage: storage);
+    }
 
     final live = clock ?? DateTime.now;
     final target = live();
@@ -546,7 +750,10 @@ class IssueStore extends ChangeNotifier {
     // 組み立てているあいだだけ、時計を過去に進めながら書く。
     var cursor = target;
     var building = true;
-    final store = IssueStore(clock: () => building ? cursor : live(), storage: storage);
+    final store = IssueStore(
+      clock: () => building ? cursor : live(),
+      storage: storage,
+    );
 
     // エアコンのフィルターそうじ: 2回の完了を経て、いまの1件が3日後に出ている。
     cursor = today.subtract(const Duration(days: 118));
@@ -558,7 +765,9 @@ class IssueStore extends ChangeNotifier {
     cursor = today.subtract(const Duration(days: 117));
     store.complete(aircon.id);
     cursor = today.subtract(const Duration(days: 57));
-    store.complete(store.openIssues.firstWhere((i) => i.title.startsWith('エアコン')).id);
+    store.complete(
+      store.openIssues.firstWhere((i) => i.title.startsWith('エアコン')).id,
+    );
 
     cursor = today.subtract(const Duration(days: 3, hours: 2));
     final noise = store.add(title: '水道から変な音がする', assigneeId: 'me');
@@ -568,12 +777,16 @@ class IssueStore extends ChangeNotifier {
     store.comment(noise.id, '夜に音がする');
     cursor = today.subtract(const Duration(days: 2));
     store.comment(noise.id, '管理会社に電話した');
-    cursor = today.subtract(const Duration(days: 2)).add(const Duration(hours: 1));
+    cursor = today
+        .subtract(const Duration(days: 2))
+        .add(const Duration(hours: 1));
     store.setStatus(noise.id, IssueStatus.waiting);
 
     cursor = today.subtract(const Duration(days: 1));
     store.add(title: '保育園の書類を書く', assigneeId: 'partner', dueDate: today);
-    cursor = today.subtract(const Duration(days: 1)).add(const Duration(hours: 2));
+    cursor = today
+        .subtract(const Duration(days: 1))
+        .add(const Duration(hours: 2));
     store.add(
       title: 'ゴミ出し',
       assigneeId: 'partner',
@@ -593,7 +806,12 @@ class IssueStore extends ChangeNotifier {
     cursor = today.subtract(const Duration(hours: 3));
     store.add(title: '牛乳を買う', assigneeId: 'me', dueDate: today);
     cursor = today.subtract(const Duration(hours: 2));
-    store.add(title: 'お風呂そうじ', assigneeId: 'partner', dueDate: today, recurrence: Recurrence.daily);
+    store.add(
+      title: 'お風呂そうじ',
+      assigneeId: 'partner',
+      dueDate: today,
+      recurrence: Recurrence.daily,
+    );
 
     cursor = target;
     building = false;

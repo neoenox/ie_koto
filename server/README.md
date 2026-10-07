@@ -1,6 +1,6 @@
 # いえこと の同期サーバー
 
-Cloudflare Workers + D1。opの出し入れ2本に、世帯の始末2本を足した**計4本**。
+Cloudflare Workers + D1。操作ログ、世帯、メンバー名の同期を行う。
 基本の2本は「op（操作ログ）を預かって、挿入順に返す」だけ。
 突き合わせの中身（どのopが勝つか、次の1件をどう決めるか）は端末側が決める（[../lib/sync/log.dart](../lib/sync/log.dart)）。
 
@@ -9,6 +9,9 @@ GET  /ops?household=<id>&since=<cursor>[&limit=<n>][&issue=<id>]   増分をも�
 POST /ops  {"household": "<id>", "ops": [...]}                    自分のopを送る
 DELETE /ops?household=<id>                                        世帯を消す（opと世帯の行。端末の記録は残る）
 POST /household/rotate  {"household": "<id>", "token": "<新しいトークン>"}   トークンを作り直す
+POST /household/members/migrate  旧 me/partner を世帯共通IDへ一度だけ移行
+GET  /household/members?household=<id>                              メンバー一覧
+POST /household/members  {"household":"<id>","id":"mem_…","name":"…"} 表示名を保存
 ```
 
 どれも `Authorization: Bearer <世帯トークン>` が要る。
@@ -36,7 +39,7 @@ Cloudflare のアカウントが無くても、アプリと同期のテストが
 
 ```bash
 cd server
-npm test                                          # Workerのテスト（17件・本物のSQLで）
+npm test                                          # Workerのテスト（20件・本物のSQLで）
 npm run serve -- --port 8799                      # メモリ上のDBで起動
 npm run serve -- --port 8799 --db ./local.db      # ファイルに残す
 ```
@@ -72,7 +75,7 @@ npx wrangler login
 
 ## 確かめてあること
 
-`npm test` の17件は、**schema.sql と src/ をそのまま**動かして確かめている（差し替えているのは D1 だけ）:
+`npm test` の20件は、**schema.sql と src/ をそのまま**動かして確かめている（差し替えているのは D1 だけ）:
 挿入順の取り出し、差分、二重POST、同時POST、ページング、世帯ごとの独立、トークンの拒否、
 壊れたopの拒否（まとめて400）、件数上限、`derivedFrom` の保存、壊れた行の読み飛ばし、CORS、
 `issue=` の絞り込み（ほかの案件が混ざらない・誰も知らないidは空・空文字と長すぎるidは400）、
@@ -90,5 +93,5 @@ Dart 側からは [../test/sync_worker_e2e_test.dart](../test/sync_worker_e2e_te
 ## まだやっていないこと
 
 - レート制限、サイズの監視、不要になったopの整理（追記のみなので増え続ける）
-- `members` テーブルのサーバー共有（表示名は当面、端末ローカルで持つ。履歴の「だれが」はopの `member` で残る）
+- 個人ログインによる本人確認（世帯メンバーIDは認証情報ではない）
 - OSのプッシュ通知（アプリ内のお知らせ1行＋担当通知は実装済み）

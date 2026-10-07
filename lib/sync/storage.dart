@@ -19,6 +19,7 @@ class SavedState {
     this.skippedOps = 0,
     this.meId = '',
     this.memberNames = const <String, String>{},
+    this.pendingMemberNames = const <String, String>{},
     this.pendingRelayIds = const <String>{},
   });
 
@@ -41,8 +42,9 @@ class SavedState {
   /// この端末を使う人（member_id）。空なら未設定（'me'扱い）。
   final String meId;
 
-  /// 表示名の上書き（member_id → 名前。端末ローカルで持つ）。
+  /// 最後に受け取ったメンバー名（member_id → 名前）。
   final Map<String, String> memberNames;
+  final Map<String, String> pendingMemberNames;
 
   final Set<String> pendingRelayIds;
 }
@@ -64,18 +66,18 @@ class SyncCredentials {
   final int cursor;
 
   SyncCredentials withCursor(int cursor) => SyncCredentials(
-        baseUrl: baseUrl,
-        householdId: householdId,
-        token: token,
-        cursor: cursor,
-      );
+    baseUrl: baseUrl,
+    householdId: householdId,
+    token: token,
+    cursor: cursor,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'baseUrl': baseUrl,
-        'householdId': householdId,
-        'token': token,
-        'cursor': cursor,
-      };
+    'baseUrl': baseUrl,
+    'householdId': householdId,
+    'token': token,
+    'cursor': cursor,
+  };
 
   /// 壊れていれば null（同期の設定が無いのと同じ扱い）。
   static SyncCredentials? fromJson(Object? raw) {
@@ -123,6 +125,7 @@ abstract class Storage {
 
   /// 表示名の上書き。
   void saveMemberNames(Map<String, String> names);
+  void savePendingMemberNames(Map<String, String> names);
 }
 
 /// 文字列だけを預けられる場所。
@@ -138,7 +141,8 @@ class SharedPrefsStore implements KeyValueStore {
 
   final SharedPreferences _prefs;
 
-  static Future<SharedPrefsStore> open() async => SharedPrefsStore(await SharedPreferences.getInstance());
+  static Future<SharedPrefsStore> open() async =>
+      SharedPrefsStore(await SharedPreferences.getInstance());
 
   @override
   String? read(String key) => _prefs.getString(key);
@@ -165,8 +169,8 @@ class DeviceStorage implements Storage {
   DeviceStorage(this._store) : _baseStore = _store, namespace = null;
 
   DeviceStorage._(this._baseStore, String namespace)
-      : _store = _ScopedKeyValueStore(_baseStore, namespace),
-        namespace = namespace;
+    : _store = _ScopedKeyValueStore(_baseStore, namespace),
+      namespace = namespace;
 
   final KeyValueStore _baseStore;
   final String? namespace;
@@ -176,8 +180,21 @@ class DeviceStorage implements Storage {
     const migratedKey = 'ie_koto.household_scope_migrated';
     if (_baseStore.read(migratedKey) != 'true') {
       final scoped = _ScopedKeyValueStore(_baseStore, namespace);
-      for (final key in [chunksKey, deviceKey, pushedKey, syncKey, meKey, membersKey,
-        for (var i = 0; i < (int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0); i++) chunkKey(i)]) {
+      for (final key in [
+        chunksKey,
+        deviceKey,
+        pushedKey,
+        syncKey,
+        meKey,
+        membersKey,
+        pendingMembersKey,
+        for (
+          var i = 0;
+          i < (int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0);
+          i++
+        )
+          chunkKey(i),
+      ]) {
         final value = _baseStore.read(key);
         if (value != null && scoped.read(key) == null) scoped.write(key, value);
       }
@@ -187,7 +204,8 @@ class DeviceStorage implements Storage {
   }
 
   /// 端末の置き場を開く（アプリの起動時に1回）。
-  static Future<DeviceStorage> open() async => DeviceStorage(await SharedPrefsStore.open());
+  static Future<DeviceStorage> open() async =>
+      DeviceStorage(await SharedPrefsStore.open());
 
   /// 1つのまとまりに入れるopの数。
   static const int chunkSize = 200;
@@ -200,6 +218,7 @@ class DeviceStorage implements Storage {
   static const String syncKey = 'ie_koto.sync';
   static const String meKey = 'ie_koto.me_id';
   static const String membersKey = 'ie_koto.member_names';
+  static const String pendingMembersKey = 'ie_koto.pending_members';
 
   static String chunkKey(int index) => '$opsPrefix.$index';
 
@@ -290,6 +309,13 @@ class DeviceStorage implements Storage {
     _cachedFingerprint = null;
   }
 
+  @override
+  void savePendingMemberNames(Map<String, String> names) {
+    _store.write(pendingMembersKey, jsonEncode(names));
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
   /// 中身が変わったかどうかを、安い読み取りだけで見分けるための目印。
   String _fingerprint() {
     final chunks = _store.read(chunksKey) ?? '';
@@ -303,6 +329,7 @@ class DeviceStorage implements Storage {
       _store.read(syncKey) ?? '',
       _store.read(meKey) ?? '',
       _store.read(membersKey) ?? '',
+      _store.read(pendingMembersKey) ?? '',
     ].join('|');
   }
 
@@ -335,13 +362,14 @@ class DeviceStorage implements Storage {
       skippedOps: decoded.skipped,
       meId: _store.read(meKey) ?? '',
       memberNames: _readMemberNames(),
+      pendingMemberNames: _readStringMap(pendingMembersKey),
     );
   }
 
   List<String> _lines(String? text) => <String>[
-        for (final line in (text ?? '').split('\n'))
-          if (line.trim().isNotEmpty) line,
-      ];
+    for (final line in (text ?? '').split('\n'))
+      if (line.trim().isNotEmpty) line,
+  ];
 
   Set<String> _readRelayIds() {
     try {
@@ -364,14 +392,21 @@ class DeviceStorage implements Storage {
   }
 
   Map<String, String> _readMemberNames() {
-    final raw = _store.read(membersKey);
+    return _readStringMap(membersKey);
+  }
+
+  Map<String, String> _readStringMap(String key) {
+    final raw = _store.read(key);
     if (raw == null || raw.isEmpty) return const <String, String>{};
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return const <String, String>{};
       final out = <String, String>{};
       decoded.forEach((key, value) {
-        if (key is String && value is String && key.isNotEmpty && value.trim().isNotEmpty) {
+        if (key is String &&
+            value is String &&
+            key.isNotEmpty &&
+            value.trim().isNotEmpty) {
           out[key] = value.trim();
         }
       });

@@ -14,6 +14,8 @@ class OpsServer {
 
   final String token;
   final List<Map<String, Object?>> ops = <Map<String, Object?>>[];
+  final Map<String, String> legacyAliases = <String, String>{};
+  final Map<String, String> members = <String, String>{};
 
   HttpServer? _server;
 
@@ -65,7 +67,11 @@ class OpsServer {
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
     response.headers.set('access-control-allow-origin', '*');
-    response.headers.contentType = ContentType('application', 'json', charset: 'utf-8');
+    response.headers.contentType = ContentType(
+      'application',
+      'json',
+      charset: 'utf-8',
+    );
 
     if (forcedStatus != null) {
       response.statusCode = forcedStatus!;
@@ -74,16 +80,61 @@ class OpsServer {
       return;
     }
 
-    if (authRequired && request.headers.value('authorization') != 'Bearer $token') {
+    if (authRequired &&
+        request.headers.value('authorization') != 'Bearer $token') {
       response.statusCode = 401;
       response.write('{"error":"unauthorized"}');
       await response.close();
       return;
     }
 
+    if (request.uri.path == '/household/members/migrate' &&
+        request.method == 'POST') {
+      final body =
+          jsonDecode(await utf8.decoder.bind(request).join())
+              as Map<String, Object?>;
+      final candidates = body['legacyMembers'] as List<Object?>? ?? const [];
+      for (final legacyId in const ['me', 'partner']) {
+        legacyAliases.putIfAbsent(
+          legacyId,
+          () => legacyId == 'me'
+              ? 'mem_11111111111111111111111111111111'
+              : 'mem_22222222222222222222222222222222',
+        );
+        final candidate = candidates.cast<Map<Object?, Object?>>().where(
+          (m) => m['id'] == legacyId,
+        );
+        final name = candidate.isEmpty
+            ? (legacyId == 'me' ? '自分' : 'パートナー')
+            : candidate.first['name'] as String;
+        members.putIfAbsent(legacyAliases[legacyId]!, () => name);
+      }
+      response.write(jsonEncode(_memberDirectory()));
+      await response.close();
+      return;
+    }
+
+    if (request.uri.path == '/household/members' && request.method == 'GET') {
+      response.write(jsonEncode(_memberDirectory()));
+      await response.close();
+      return;
+    }
+
+    if (request.uri.path == '/household/members' && request.method == 'POST') {
+      final body =
+          jsonDecode(await utf8.decoder.bind(request).join())
+              as Map<String, Object?>;
+      members[body['id']! as String] = body['name']! as String;
+      response.write(jsonEncode(body));
+      await response.close();
+      return;
+    }
+
     if (request.method == 'POST' && request.uri.path == '/ops') {
       posts += 1;
-      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map<String, Object?>;
+      final body =
+          jsonDecode(await utf8.decoder.bind(request).join())
+              as Map<String, Object?>;
       final incoming = body['ops']! as List<Object?>;
       var accepted = 0;
       var duplicates = 0;
@@ -97,7 +148,13 @@ class OpsServer {
         ops.add(op);
         accepted += 1;
       }
-      response.write(jsonEncode(<String, Object?>{'cursor': cursor, 'accepted': accepted, 'duplicates': duplicates}));
+      response.write(
+        jsonEncode(<String, Object?>{
+          'cursor': cursor,
+          'accepted': accepted,
+          'duplicates': duplicates,
+        }),
+      );
       await response.close();
       return;
     }
@@ -107,23 +164,38 @@ class OpsServer {
 
       if (cutResponse) {
         final socket = await response.detachSocket();
-        socket.write('HTTP/1.1 200 OK\r\ncontent-type: application/json; charset=utf-8\r\ncontent-length: 4080\r\n\r\n{"cursor":0,"ops":[');
+        socket.write(
+          'HTTP/1.1 200 OK\r\ncontent-type: application/json; charset=utf-8\r\ncontent-length: 4080\r\n\r\n{"cursor":0,"ops":[',
+        );
         await socket.flush();
         socket.destroy();
         return;
       }
 
-      final since = int.tryParse(request.uri.queryParameters['since'] ?? '0') ?? 0;
+      final since =
+          int.tryParse(request.uri.queryParameters['since'] ?? '0') ?? 0;
       final limitRaw = request.uri.queryParameters['limit'];
       final limit = limitRaw == null ? null : int.tryParse(limitRaw);
 
       final available = <Map<String, Object?>>[...ops, ...injectedOps];
-      final start = since < 0 ? 0 : (since > available.length ? available.length : since);
+      final start = since < 0
+          ? 0
+          : (since > available.length ? available.length : since);
       final rest = available.sublist(start);
-      final page = limit == null || limit <= 0 ? rest : rest.take(limit).toList();
-      final cursor = page.isEmpty ? (since > available.length ? available.length : since) : since + page.length;
+      final page = limit == null || limit <= 0
+          ? rest
+          : rest.take(limit).toList();
+      final cursor = page.isEmpty
+          ? (since > available.length ? available.length : since)
+          : since + page.length;
 
-      response.write(jsonEncode(<String, Object?>{'cursor': cursor, 'ops': page, 'skipped': 0}));
+      response.write(
+        jsonEncode(<String, Object?>{
+          'cursor': cursor,
+          'ops': page,
+          'skipped': 0,
+        }),
+      );
       await response.close();
       return;
     }
@@ -132,4 +204,12 @@ class OpsServer {
     response.write('{"error":"not_found"}');
     await response.close();
   }
+
+  Map<String, Object?> _memberDirectory() => <String, Object?>{
+    'members': [
+      for (final entry in members.entries)
+        {'id': entry.key, 'name': entry.value},
+    ],
+    'aliases': legacyAliases,
+  };
 }
