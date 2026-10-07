@@ -44,19 +44,20 @@ class HouseholdSheet extends StatefulWidget {
 enum _Mode { view, create, join }
 
 class _HouseholdSheetState extends State<HouseholdSheet> {
-  late _Mode _mode = widget.current == null ? _Mode.create : _Mode.view;
+  late _Mode _mode = _current == null ? _Mode.create : _Mode.view;
 
   final _base = TextEditingController();
   final _household = TextEditingController();
   final _token = TextEditingController();
   String? _error;
+  late SyncCredentials? _current = widget.current;
 
   @override
   void initState() {
     super.initState();
-    _base.text = widget.current?.baseUrl ?? widget.initialBaseUrl;
-    _household.text = widget.current?.householdId ?? '';
-    _token.text = widget.current?.token ?? '';
+    _base.text = _current?.baseUrl ?? widget.initialBaseUrl;
+    _household.text = _current?.householdId ?? '';
+    _token.text = _current?.token ?? '';
   }
 
   @override
@@ -98,16 +99,16 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              widget.current == null ? 'いまはこの端末だけで使っています' : 'いまの家とつながっています',
+              _current == null ? 'いまはこの端末だけで使っています' : 'いまの家とつながっています',
               style: TextStyle(
                 fontSize: 12.5,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 12),
-            if (widget.current == null) _tabs(),
-            if (_mode == _Mode.view && widget.current != null)
-              _currentView(widget.current!)
+            if (_current == null) _tabs(),
+            if (_mode == _Mode.view && _current != null)
+              _currentView(_current!)
             else
               _form(),
             if (widget.store != null) ...[
@@ -206,7 +207,11 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
                     ),
                   ),
                 );
-                if (token != null) setState(() {});
+                if (token != null) setState(() {
+                  final current = _current!;
+                  _current = SyncCredentials(baseUrl: current.baseUrl, householdId: current.householdId, token: token, cursor: 0);
+                  _token.text = token;
+                });
               },
               child: const Text('トークンを作り直す'),
             ),
@@ -287,7 +292,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!creating || widget.current != null) const SizedBox(height: 8),
+        if (!creating || _current != null) const SizedBox(height: 8),
         TextField(
           controller: _base,
           keyboardType: TextInputType.url,
