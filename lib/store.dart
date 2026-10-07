@@ -96,6 +96,7 @@ class IssueStore extends ChangeNotifier {
       members.add(Member(id, id));
     }
     storage?.saveMeId(id);
+    _rebuild();
     notifyListeners();
   }
 
@@ -197,7 +198,19 @@ class IssueStore extends ChangeNotifier {
   }
 
   /// 画面に出す名前。担当なしは「だれでも」。
-  String assigneeWord(String? id) => memberById(id)?.name ?? 'だれでも';
+  /// 既定の呼び名はこの端末の利用者から見た関係で表示する。
+  String? memberLabel(String? id) {
+    final member = memberById(id);
+    if (member == null) return null;
+    final isDefault = (id == 'me' && member.name == '自分') ||
+        (id == 'partner' && member.name == 'パートナー');
+    if (isDefault && (meId == 'me' || meId == 'partner')) {
+      return id == meId ? '自分' : 'パートナー';
+    }
+    return member.name;
+  }
+
+  String assigneeWord(String? id) => memberLabel(id) ?? 'だれでも';
 
   bool _isTodayDue(Issue i) => i.dueDate != null && !_day(i.dueDate!).isAfter(today);
 

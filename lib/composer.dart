@@ -158,7 +158,7 @@ class _ComposerState extends State<Composer> {
               MiniChip(label: 'だれでも', selected: _assigneeId == null, onTap: () => setState(() => _assigneeId = null)),
               for (final m in widget.store.members)
                 MiniChip(
-                  label: m.name,
+                  label: widget.store.memberLabel(m.id)!,
                   selected: _assigneeId == m.id,
                   onTap: () => setState(() => _assigneeId = m.id),
                 ),
