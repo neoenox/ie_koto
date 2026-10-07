@@ -40,7 +40,7 @@ export default {
     const cors = corsHeaders(request, env);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-    if (url.pathname !== '/ops' && url.pathname !== '/household/rotate') {
+    if (url.pathname !== '/ops' && url.pathname !== '/household/rotate' && url.pathname !== '/household/share') {
       return json({ error: 'not_found' }, 404, cors);
     }
 
@@ -48,6 +48,10 @@ export default {
       if (url.pathname === '/household/rotate') {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
         return await handleRotate(request, env, cors);
+      }
+      if (url.pathname === '/household/share') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
+        return await handleCreateShare(request, env, cors);
       }
       if (request.method === 'GET') return await handlePull(request, env, url, cors);
       if (request.method === 'POST') return await handlePush(request, env, cors);
@@ -82,8 +86,10 @@ async function handlePull(request, env, url, cors) {
 
   const db = env.DB;
   const now = new Date().toISOString();
-  const allowed = await ensureHousehold(db, householdId, await hashToken(token), now);
-  if (!allowed) return json({ error: 'unauthorized' }, 401, cors);
+  const owner = await ensureHousehold(db, householdId, await hashToken(token), now);
+  const grant = owner ? null : await findShareGrant(db, householdId, token, now);
+  if (!owner && (!grant || grant.issue_id !== issueId)) return json({ error: 'unauthorized' }, 401, cors);
+  if (grant && issueId !== grant.issue_id) return json({ error: 'unauthorized' }, 401, cors);
 
   const page = await pullOps(db, householdId, since, limit, issueId);
   return json(page, 200, cors);
@@ -114,11 +120,50 @@ async function handlePush(request, env, cors) {
 
   const db = env.DB;
   const now = new Date().toISOString();
-  const allowed = await ensureHousehold(db, householdId, await hashToken(token), now);
-  if (!allowed) return json({ error: 'unauthorized' }, 401, cors);
+  const owner = await ensureHousehold(db, householdId, await hashToken(token), now);
+  const grant = owner ? null : await findShareGrant(db, householdId, token, now);
+  if (!owner && !grant) return json({ error: 'unauthorized' }, 401, cors);
+  if (grant && ops.some((op) => op.issueId !== grant.issue_id || op.kind !== 'assignee' ||
+      op.member !== grant.member_id || op.data.assigneeId !== grant.member_id)) {
+    return json({ error: 'share_scope' }, 403, cors);
+  }
 
   const result = await pushOps(db, householdId, ops, now);
   return json(result, 200, cors);
+}
+
+async function handleCreateShare(request, env, cors) {
+  const ownerToken = bearerToken(request);
+  const raw = await readJson(request);
+  if (!ownerToken) return json({ error: 'unauthorized' }, 401, cors);
+  if (!raw) return json({ error: 'bad_json' }, 400, cors);
+  const householdId = typeof raw.household === 'string' ? raw.household : '';
+  const issueId = typeof raw.issue === 'string' ? raw.issue : '';
+  const memberId = typeof raw.member === 'string' ? raw.member : '';
+  const expiresAt = typeof raw.expiresAt === 'string' ? raw.expiresAt : '';
+  const expiry = Date.parse(expiresAt);
+  const nowDate = Date.now();
+  if (!HOUSEHOLD_ID.test(householdId) || issueId.length < 1 || issueId.length > 128 ||
+      memberId.length < 1 || memberId.length > 64 || !Number.isFinite(expiry) ||
+      expiry <= nowDate || expiry > nowDate + 7 * 24 * 60 * 60 * 1000) {
+    return json({ error: 'bad_share' }, 400, cors);
+  }
+  const db = env.DB;
+  const now = new Date(nowDate).toISOString();
+  if (!await ensureHousehold(db, householdId, await hashToken(ownerToken), now)) {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  const shareToken = [...crypto.getRandomValues(new Uint8Array(32))]
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  await db.prepare('INSERT INTO share_tokens (token_hash, household_id, issue_id, member_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(await hashToken(shareToken), householdId, issueId, memberId, new Date(expiry).toISOString(), now).run();
+  return json({ token: shareToken, expiresAt: new Date(expiry).toISOString() }, 200, cors);
+}
+
+async function findShareGrant(db, householdId, token, now) {
+  const grant = await db.prepare('SELECT issue_id, member_id, expires_at FROM share_tokens WHERE household_id = ? AND token_hash = ?')
+    .bind(householdId, await hashToken(token)).first();
+  return grant && grant.expires_at > now ? grant : null;
 }
 
 /** `DELETE /ops?household=<id>` 世帯を消す（opと世帯の行。端末の記録は残る）。 */

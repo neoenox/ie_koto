@@ -15,7 +15,7 @@ class DetailPage extends StatefulWidget {
   final String issueId;
 
   /// 1件リンクを作る（同期の設定が無ければ null）。
-  final String? Function(Issue)? linkFor;
+  final Future<String?> Function(Issue)? linkFor;
 
   @override
   State<DetailPage> createState() => _DetailPageState();
@@ -148,7 +148,7 @@ class _DetailPageState extends State<DetailPage> {
   /// アプリを入れていない相手に送る「1件リンク」。
   /// 相手はブラウザで開いて、中身を見て「やる」だけ押せる（アカウントもインストールも不要）。
   Future<void> _copyLink(Issue issue) async {
-    final text = widget.linkFor?.call(issue);
+    final text = await widget.linkFor?.call(issue);
     if (text == null) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;

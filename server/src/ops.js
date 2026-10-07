@@ -146,6 +146,7 @@ export async function pushOps(db, householdId, incoming, now) {
  * トークンを知っている人だけが呼べる。消した後の cursor は 0 から。
  */
 export async function deleteHousehold(db, householdId) {
+  await db.prepare('DELETE FROM share_tokens WHERE household_id = ?').bind(householdId).run();
   await db.prepare('DELETE FROM ops WHERE household_id = ?').bind(householdId).run();
   await db.prepare('DELETE FROM households WHERE id = ?').bind(householdId).run();
   return { deleted: true };

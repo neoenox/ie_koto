@@ -144,6 +144,24 @@ class SyncApi {
         ));
   }
 
+  /// Issue an expiring key that is restricted by the server to one issue.
+  Future<String> createShareToken({required String issueId, required String memberId, required DateTime expiresAt}) async {
+    final response = await _send(() => _client.post(
+      Uri.parse('$baseUrl/household/share'),
+      headers: _headers,
+      body: jsonEncode(<String, Object?>{
+        'household': householdId,
+        'issue': issueId,
+        'member': memberId,
+        'expiresAt': expiresAt.toUtc().toIso8601String(),
+      }),
+    ));
+    final body = _jsonObject(response);
+    final token = body['token'];
+    if (token is! String || token.length < 32) throw SyncException('bad_response');
+    return token;
+  }
+
   void close() => _client.close();
 
   Map<String, String> get _headers => <String, String>{

@@ -48,7 +48,7 @@ void main() {
         store: store,
         issueId: issue.id,
         linkFor: withLink
-            ? (target) => OneLink(
+            ? (target) async => OneLink(
                   baseUrl: 'https://ie-koto.example.workers.dev',
                   householdId: 'hh_e2e0000000000000000000000000000',
                   token: token,
