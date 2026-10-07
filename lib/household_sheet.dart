@@ -214,7 +214,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
                     _current = SyncCredentials(
                       baseUrl: current.baseUrl,
                       householdId: current.householdId,
-                      token: token!,
+                      token: token,
                       cursor: 0,
                     );
                     _token.text = token;
