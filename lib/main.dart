@@ -46,7 +46,7 @@ class IeKotoApp extends StatefulWidget {
   State<IeKotoApp> createState() => _IeKotoAppState();
 }
 
-class _IeKotoAppState extends State<IeKotoApp> {
+class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
   /// 端末に残しておいたものから開く（初回だけ、触って確かめる用のデータが入る）。
   late final IssueStore _store = widget.store ?? IssueStore.demo(storage: widget.storage);
 
@@ -59,6 +59,7 @@ class _IeKotoAppState extends State<IeKotoApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.oneLink != null) return; // 1件リンクは、端末の保存も同期の設定も使わない
 
     // ビルド時に渡した設定（--dart-define）が最優先。無ければ端末に残しておいたものを使う。
@@ -162,7 +163,16 @@ class _IeKotoAppState extends State<IeKotoApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final session = _session;
+      if (session != null) unawaited(_syncOnce(session));
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _session?.close();
     super.dispose();
   }
