@@ -265,6 +265,8 @@ class _HomePageState extends State<HomePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('いまは何もない', style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            _doneEntry(),
             const SizedBox(height: 6),
             Text(
               '気づいたときに 追加 で入れておく',
