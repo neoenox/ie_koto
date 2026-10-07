@@ -148,9 +148,9 @@ void main() {
 
     await tester.tap(find.byTooltip('そのほか'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('消す'));
+    await tester.tap(find.text('削除'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('を消しますか'), findsOneWidget);
+    expect(find.textContaining('を削除しますか'), findsOneWidget);
 
     await tester.tap(find.text('やめる'));
     await tester.pumpAndSettle();
@@ -158,7 +158,7 @@ void main() {
 
     await tester.tap(find.byTooltip('そのほか'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('消す'));
+    await tester.tap(find.text('削除'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('confirm-delete')));
     await tester.pumpAndSettle();

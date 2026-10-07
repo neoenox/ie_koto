@@ -244,15 +244,15 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
                   Navigator.of(context).pop(const HouseholdLeave());
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('消せませんでした。つながりを確認してください')),
+                    const SnackBar(content: Text('削除できませんでした。つながりを確認してください')),
                   );
                 }
               },
-              child: const Text('世帯を消す'),
+              child: const Text('世帯を削除'),
             ),
           ),
         Text(
-          'トークンを作り直すと古い招待文は使えなくなります。世帯を消しても端末の記録は残ります',
+          'トークンを作り直すと古い招待文は使えなくなります。世帯を削除しても端末の記録は残ります',
           style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
@@ -263,11 +263,11 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('世帯を消しますか？', style: TextStyle(fontSize: 16)),
+        title: const Text('世帯を削除しますか？', style: TextStyle(fontSize: 16)),
         content: const Text('サーバーの記録が消えます。端末の記録は残ります。'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('やめる')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('消す')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('削除')),
         ],
       ),
     );

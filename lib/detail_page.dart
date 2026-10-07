@@ -61,6 +61,8 @@ class _DetailPageState extends State<DetailPage> {
                 Row(children: [
                   MiniChip(label: '対応待ち', selected: true, onTap: null),
                 ]),
+                const SizedBox(height: 8),
+                const Text('家族・業者などの対応を待っています。まだ完了していません。'),
               ],
               const SizedBox(height: 14),
               const HairLine(),
@@ -145,12 +147,26 @@ class _DetailPageState extends State<DetailPage> {
         },
         itemBuilder: (context) => [
           if (issue.status != IssueStatus.waiting)
-            const PopupMenuItem(value: 'waiting', child: Text('対応待ちにする')),
+            const PopupMenuItem(
+              value: 'waiting',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('対応待ちにする'),
+                subtitle: Text('家族・業者などの対応を待つ'),
+              ),
+            ),
           if (issue.status != IssueStatus.open)
-            const PopupMenuItem(value: 'open', child: Text('やることにもどす')),
-          const PopupMenuItem(value: 'rename', child: Text('名前を直す')),
+            const PopupMenuItem(
+              value: 'open',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('やることに戻す'),
+                subtitle: Text('自分たちで作業する状態に戻す'),
+              ),
+            ),
+          const PopupMenuItem(value: 'rename', child: Text('名前を変更')),
           if (widget.linkFor != null) const PopupMenuItem(value: 'link', child: Text('リンクを送る')),
-          const PopupMenuItem(value: 'delete', child: Text('消す')),
+          const PopupMenuItem(value: 'delete', child: Text('削除')),
         ],
       );
 
@@ -239,14 +255,14 @@ class _DetailPageState extends State<DetailPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('「${issue.title}」を消しますか？', style: const TextStyle(fontSize: 16)),
+        title: Text('「${issue.title}」を削除しますか？', style: const TextStyle(fontSize: 16)),
         content: const Text('これまでのやりとりも見えなくなります。'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('やめる')),
           FilledButton(
             key: const ValueKey('confirm-delete'),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('消す'),
+            child: const Text('削除'),
           ),
         ],
       ),
@@ -261,7 +277,7 @@ class _DetailPageState extends State<DetailPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('名前を直す', style: TextStyle(fontSize: 16)),
+        title: const Text('名前を変更', style: TextStyle(fontSize: 16)),
         content: TextField(
           controller: controller,
           autofocus: true,
