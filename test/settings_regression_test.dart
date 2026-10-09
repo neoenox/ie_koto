@@ -5,7 +5,7 @@ import 'package:ie_koto/household_sheet.dart';
 import 'package:ie_koto/store.dart';
 
 void main() {
-  testWidgets('名前欄を移動しても、両方の名前が保存される', (tester) async {
+  testWidgets('自分の名前は移動時に保存され、他人の名前は確認後に保存される', (tester) async {
     final store = IssueStore();
     await tester.pumpWidget(
       MaterialApp(
@@ -22,6 +22,10 @@ void main() {
     await tester.tap(find.text('この端末を使う人'));
     await tester.pumpAndSettle();
     expect(store.members.first.name, 'あき');
+    expect(store.members[1].name, 'パートナー');
+    expect(find.text('ほかの人の名前を変えますか？'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-other-member-rename')));
+    await tester.pumpAndSettle();
     expect(store.members[1].name, 'はる');
     expect(tester.takeException(), isNull);
   });
