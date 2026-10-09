@@ -228,4 +228,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.all.single.isDone, isFalse);
   });
+
+  testWidgets('#91 参加の誤りは欄に表示され閉じない', (tester) async {
+    final store = IssueStore();
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('empty-household')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('はいっている家にはいる'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('はいる'));
+    await tester.pumpAndSettle();
+
+    // 欄に紐付いた誤りが出て、シートは閉じない。
+    expect(find.text('入力を確認してください'), findsOneWidget);
+    expect(find.text('はいっている家にはいる'), findsOneWidget);
+  });
 }
