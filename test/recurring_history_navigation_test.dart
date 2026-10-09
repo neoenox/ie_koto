@@ -29,7 +29,7 @@ void main() {
         previous.first.id);
     // A past completion cannot link forward to the current unfinished task.
     expect(find.byKey(ValueKey('series-history-${active.id}')), findsNothing);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('もどる'));
     await tester.pumpAndSettle();
     expect(tester.widget<DetailPage>(find.byType(DetailPage)).issueId,
         active.id);
