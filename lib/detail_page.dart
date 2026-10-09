@@ -127,17 +127,7 @@ class _DetailPageState extends State<DetailPage> {
                 value: issue.recurrence.label,
                 onTap: () => _pickRecurrence(issue),
               ),
-              if (!issue.recurrence.isNone)
-                Padding(
-                  padding: const EdgeInsets.only(left: 76, bottom: 6),
-                  child: Text(
-                    _seriesLine(issue),
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
+              if (!issue.recurrence.isNone) _seriesHistoryLinks(issue),
               const SizedBox(height: 10),
               if (!issue.isDone) ...[
                 OutlinedButton.icon(
@@ -179,16 +169,51 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  /// 定期案件は前回・前々回がそのまま残る。これが数年で家の記録になる。
-  String _seriesLine(Issue issue) {
-    final history = widget.store.seriesHistory(issue.seriesKey);
-    if (history.isEmpty) return '前回はまだ';
-    final labels = <String>[];
-    for (var i = 0; i < history.length && i < 2; i++) {
-      final at = history[i].completedAt!;
-      labels.add('${i == 0 ? '前回' : '前々回'} ${at.month}/${at.day}');
-    }
-    return labels.join('・');
+  /// 過去の完了回を、その回のコメントと履歴が読める詳細へ開く。
+  /// 現在表示中の完了回自身・それより後の回は「前回」には含めない。
+  Widget _seriesHistoryLinks(Issue issue) {
+    final completedAt = issue.completedAt;
+    final history = widget.store
+        .seriesHistory(issue.seriesKey)
+        .where(
+          (past) =>
+              past.id != issue.id &&
+              (completedAt == null || past.completedAt!.isBefore(completedAt)),
+        )
+        .take(2)
+        .toList();
+    final textStyle = TextStyle(
+      fontSize: 11.5,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: 76, bottom: 6),
+      child: history.isEmpty
+          ? Text('前回はまだ', style: textStyle)
+          : Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (var i = 0; i < history.length; i++)
+                  TextButton(
+                    key: ValueKey('series-history-${history[i].id}'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DetailPage(
+                          store: widget.store,
+                          issueId: history[i].id,
+                          linkFor: widget.linkFor,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      '${i == 0 ? '前回' : '前々回'} '
+                      '${history[i].completedAt!.month}/${history[i].completedAt!.day}',
+                    ),
+                  ),
+              ],
+            ),
+    );
   }
 
   PopupMenuButton<String> _menu(Issue issue) => PopupMenuButton<String>(
