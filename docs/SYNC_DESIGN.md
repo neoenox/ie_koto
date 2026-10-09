@@ -311,6 +311,7 @@ op列・端末id・送信済み位置・同期設定に加え、メンバー名�
 | 送信済みの位置 | `ie_koto.pushed_through` | 起動時に送信待ちを作り直す（自分のopのうち、確認できていないものだけ） |
 | 同期の設定 | `ie_koto.sync` | 世帯id・トークン・**cursor**。次からは `--dart-define` を渡さなくていい |
 | メンバー名 | `ie_koto.member_names` | 世帯名簿を一時キャッシュする |
+| 旧メンバーID対応表 | `ie_koto.member_aliases` | オフライン再起動でも過去の担当と操作者を同じ人へ読み替える |
 | 送信待ちの名前変更 | `ie_koto.pending_members` | オフラインで変えた名前を次の同期で共有する |
 | この端末を使う人 | `ie_koto.me_id` | 操作履歴の操作者を識別する |
 

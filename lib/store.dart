@@ -25,7 +25,13 @@ class IssueStore extends ChangeNotifier {
   }) {
     final saved = storage?.load();
     final base =
-        members ?? const [Member('me', '自分'), Member('partner', 'パートナー')];
+        members ??
+        (saved != null && saved.memberNames.isNotEmpty
+            ? [
+                for (final entry in saved.memberNames.entries)
+                  Member(entry.key, entry.value),
+              ]
+            : const [Member('me', '自分'), Member('partner', 'パートナー')]);
     // 保存済みの世帯名を一時表示し、接続後に共有名簿で更新する。
     final named = [
       for (final m in base) Member(m.id, saved?.memberNames[m.id] ?? m.name),
@@ -41,7 +47,7 @@ class IssueStore extends ChangeNotifier {
           : saved.deviceId,
       storage: storage,
       members: named,
-      legacyMemberAliases: legacyMemberAliases,
+      legacyMemberAliases: {...?saved?.memberAliases, ...legacyMemberAliases},
       pendingMemberNames: Map<String, String>.of(
         saved?.pendingMemberNames ?? const {},
       ),
@@ -211,6 +217,10 @@ class IssueStore extends ChangeNotifier {
       });
     storage?.savePendingMemberNames(pendingMemberNames);
     storage?.saveMeId(meId);
+    storage?.saveMemberAliases(legacyMemberAliases);
+    storage?.saveMemberNames({
+      for (final member in members) member.id: member.name,
+    });
   }
 
   /// 記録の引っ越し用。持っているopをJSON配列で書き出す。

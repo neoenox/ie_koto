@@ -7,7 +7,7 @@ import 'wire.dart';
 
 /// 端末に残すもの（設計の手順1）。
 ///
-/// 残すのは **opの列・端末id・送信済みの位置・同期の設定** だけ。
+/// opの列・端末id・送信済み位置・同期設定と、共有名簿・旧ID対応表を残す。
 /// 画面に出す形（射影）は残さない。起動時に op から作り直せばよい
 /// （規則が1つで済むし、射影の形を変えても保存を壊さない）。
 class SavedState {
@@ -20,6 +20,7 @@ class SavedState {
     this.meId = '',
     this.memberNames = const <String, String>{},
     this.pendingMemberNames = const <String, String>{},
+    this.memberAliases = const <String, String>{},
     this.pendingRelayIds = const <String>{},
   });
 
@@ -45,6 +46,7 @@ class SavedState {
   /// 最後に受け取ったメンバー名（member_id → 名前）。
   final Map<String, String> memberNames;
   final Map<String, String> pendingMemberNames;
+  final Map<String, String> memberAliases;
 
   final Set<String> pendingRelayIds;
 }
@@ -126,6 +128,7 @@ abstract class Storage {
   /// 表示名の上書き。
   void saveMemberNames(Map<String, String> names);
   void savePendingMemberNames(Map<String, String> names);
+  void saveMemberAliases(Map<String, String> aliases);
 }
 
 /// 文字列だけを預けられる場所。
@@ -188,6 +191,7 @@ class DeviceStorage implements Storage {
         meKey,
         membersKey,
         pendingMembersKey,
+        memberAliasesKey,
         for (
           var i = 0;
           i < (int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0);
@@ -219,6 +223,7 @@ class DeviceStorage implements Storage {
   static const String meKey = 'ie_koto.me_id';
   static const String membersKey = 'ie_koto.member_names';
   static const String pendingMembersKey = 'ie_koto.pending_members';
+  static const String memberAliasesKey = 'ie_koto.member_aliases';
 
   static String chunkKey(int index) => '$opsPrefix.$index';
 
@@ -316,6 +321,13 @@ class DeviceStorage implements Storage {
     _cachedFingerprint = null;
   }
 
+  @override
+  void saveMemberAliases(Map<String, String> aliases) {
+    _store.write(memberAliasesKey, jsonEncode(aliases));
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
   /// 中身が変わったかどうかを、安い読み取りだけで見分けるための目印。
   String _fingerprint() {
     final chunks = _store.read(chunksKey) ?? '';
@@ -330,6 +342,7 @@ class DeviceStorage implements Storage {
       _store.read(meKey) ?? '',
       _store.read(membersKey) ?? '',
       _store.read(pendingMembersKey) ?? '',
+      _store.read(memberAliasesKey) ?? '',
     ].join('|');
   }
 
@@ -363,6 +376,7 @@ class DeviceStorage implements Storage {
       meId: _store.read(meKey) ?? '',
       memberNames: _readMemberNames(),
       pendingMemberNames: _readStringMap(pendingMembersKey),
+      memberAliases: _readStringMap(memberAliasesKey),
     );
   }
 
