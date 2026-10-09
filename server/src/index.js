@@ -41,7 +41,8 @@ export default {
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (url.pathname !== '/ops' && url.pathname !== '/household/rotate' && url.pathname !== '/household/share' &&
-        url.pathname !== '/household/members/migrate' && url.pathname !== '/household/members') {
+        url.pathname !== '/household/members/migrate' && url.pathname !== '/household/members' &&
+        url.pathname !== '/household/members/merge' && url.pathname !== '/household/members/remove') {
       return json({ error: 'not_found' }, 404, cors);
     }
 
@@ -58,6 +59,14 @@ export default {
         if (request.method === 'GET') return await handleGetMembers(request, env, url, cors);
         if (request.method === 'POST') return await handleSaveMember(request, env, cors);
         return json({ error: 'method_not_allowed' }, 405, cors);
+      }
+      if (url.pathname === '/household/members/merge') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
+        return await handleMergeMembers(request, env, cors);
+      }
+      if (url.pathname === '/household/members/remove') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
+        return await handleRemoveMember(request, env, cors);
       }
       if (url.pathname === '/household/share') {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
@@ -138,6 +147,54 @@ async function handleSaveMember(request, env, cors) {
   await db.prepare('INSERT INTO members (household_id, member_id, display_name) VALUES (?, ?, ?) ON CONFLICT(household_id, member_id) DO UPDATE SET display_name = excluded.display_name')
     .bind(raw.household, raw.id, raw.name.trim()).run();
   return json({ id: raw.id, name: raw.name.trim() }, 200, cors);
+}
+
+/** 重複した人をまとめる。旧IDは対応表に残し、旧行だけ消す（履歴の見え方は対応表で保つ）。 */
+async function handleMergeMembers(request, env, cors) {
+  const token = bearerToken(request);
+  const raw = await readJson(request);
+  if (!token) return json({ error: 'unauthorized' }, 401, cors);
+  if (!raw || typeof raw.household !== 'string' || !HOUSEHOLD_ID.test(raw.household) ||
+      typeof raw.from !== 'string' || typeof raw.into !== 'string' ||
+      raw.from === raw.into || !isMemberId(raw.from) || !isMemberId(raw.into)) {
+    return json({ error: 'bad_member' }, 400, cors);
+  }
+  const db = env.DB;
+  if (!await ensureHousehold(db, raw.household, await hashToken(token), new Date().toISOString())) {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  const fromRow = await db.prepare('SELECT member_id FROM members WHERE household_id = ? AND member_id = ?')
+    .bind(raw.household, raw.from).first();
+  const intoRow = await db.prepare('SELECT member_id FROM members WHERE household_id = ? AND member_id = ?')
+    .bind(raw.household, raw.into).first();
+  if (!fromRow || !intoRow) return json({ error: 'unknown_member' }, 400, cors);
+  await db.prepare('INSERT OR IGNORE INTO member_aliases (household_id, legacy_id, member_id) VALUES (?, ?, ?)')
+    .bind(raw.household, raw.from, raw.into).run();
+  await db.prepare('DELETE FROM members WHERE household_id = ? AND member_id = ?')
+    .bind(raw.household, raw.from).run();
+  return await memberDirectory(db, raw.household, cors);
+}
+
+/** 使っていない人を名簿から外す。対応表は残す（履歴の見え方を保つ）。 */
+async function handleRemoveMember(request, env, cors) {
+  const token = bearerToken(request);
+  const raw = await readJson(request);
+  if (!token) return json({ error: 'unauthorized' }, 401, cors);
+  if (!raw || typeof raw.household !== 'string' || !HOUSEHOLD_ID.test(raw.household) ||
+      typeof raw.id !== 'string' || !isMemberId(raw.id)) {
+    return json({ error: 'bad_member' }, 400, cors);
+  }
+  const db = env.DB;
+  if (!await ensureHousehold(db, raw.household, await hashToken(token), new Date().toISOString())) {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  await db.prepare('DELETE FROM members WHERE household_id = ? AND member_id = ?')
+    .bind(raw.household, raw.id).run();
+  return await memberDirectory(db, raw.household, cors);
+}
+
+function isMemberId(id) {
+  return /^mem_[A-Za-z0-9_-]{16,48}$/.test(id) || id === 'me' || id === 'partner';
 }
 
 async function memberDirectory(db, household, cors) {

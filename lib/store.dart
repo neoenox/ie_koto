@@ -60,11 +60,19 @@ class IssueStore extends ChangeNotifier {
       pendingMemberNames: Map<String, String>.of(
         saved?.pendingMemberNames ?? const {},
       ),
+      pendingMemberAliases: Map<String, String>.of(
+        saved?.pendingMemberAliases ?? const {},
+      ),
+      pendingMemberRemovals: Set<String>.of(
+        saved?.pendingMemberRemovals ?? const <String>{},
+      ),
     );
     if (initialMeId != null && initialMeId.isNotEmpty) {
       store.meId = store.canonicalMemberId(initialMeId);
+      store.meExplicit = true;
     } else if (saved != null && saved.meId.isNotEmpty) {
       store.meId = store.canonicalMemberId(saved.meId);
+      store.meExplicit = true;
     }
     store._restore(saved ?? const SavedState());
     return store;
@@ -78,6 +86,8 @@ class IssueStore extends ChangeNotifier {
     required this.members,
     required Map<String, String> legacyMemberAliases,
     required this.pendingMemberNames,
+    required this.pendingMemberAliases,
+    required this.pendingMemberRemovals,
   }) : legacyMemberAliases = Map<String, String>.of(legacyMemberAliases),
        _device = Device(deviceId),
        _clock = clock ?? DateTime.now {
@@ -111,15 +121,37 @@ class IssueStore extends ChangeNotifier {
   /// 世帯メンバー。表示名は世帯で共有する。
   final List<Member> members;
   String meId = 'me';
+
+  /// この端末を使う人を、明示的に選んだかどうか。
+  /// 選ばないまま世帯に参加すると、別端末と「同じ人」になる事故が起きる。
+  bool meExplicit = false;
   final Map<String, String> legacyMemberAliases;
   final Map<String, String> pendingMemberNames;
+
+  /// まだ家に送っていない統合（旧ID → 残すID）。送信は手順3。
+  final Map<String, String> pendingMemberAliases;
+
+  /// まだ家に送っていない削除（ID）。送信は手順3。
+  final Set<String> pendingMemberRemovals;
+
+  /// 表示名の正規化。前後の半角・全角空白を落とす。
+  static String normalizeMemberName(String name) =>
+      name.replaceAll(RegExp(r'^[\s　]+|[\s　]+$'), '');
+
+  /// 関係の呼び名は人の名前として使えない。鏡表示（自分のIDだけ「自分」）と衝突する。
+  static bool isReservedMemberName(String name) {
+    final normalized = normalizeMemberName(name);
+    return normalized == '自分' || normalized == 'パートナー';
+  }
 
   Future<void> Function(Member member)? onMemberWrite;
 
   /// この端末を使う人を変える。端末に残る（同期しない）。
   void setMeId(String id) {
     id = canonicalMemberId(id);
-    if (id.isEmpty || id == meId) return;
+    if (id.isEmpty) return;
+    meExplicit = true;
+    if (id == meId) return;
     meId = id;
     if (!members.any((m) => m.id == id)) {
       members.add(Member(id, id));
@@ -129,29 +161,124 @@ class IssueStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 表示名を変え、オフライン時は送信待ちとして端末に残す。
-  void renameMember(String id, String name) {
+  /// 自分の表示名だけ変えられる。他人の名前は変えられない。
+  /// 空・予約名（自分／パートナー）も変えられない。変えたら true。
+  bool renameMember(String id, String name) {
     id = canonicalMemberId(id);
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
+    if (id != canonicalMemberId(meId)) return false;
+    final trimmed = normalizeMemberName(name);
+    if (trimmed.isEmpty || isReservedMemberName(trimmed)) return false;
     final index = members.indexWhere((m) => m.id == id);
-    if (index < 0) return;
-    if (members[index].name == trimmed) return;
+    if (index < 0) return false;
+    if (members[index].name == trimmed) return true;
     members[index] = Member(id, trimmed);
     storage?.saveMemberNames({for (final m in members) m.id: m.name});
     _markMemberPending(members[index]);
     notifyListeners();
+    return true;
   }
 
   Member addMember(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) throw ArgumentError.value(name, 'name', '名前を入れてください');
+    final trimmed = normalizeMemberName(name);
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(name, 'name', '名前を入れてください');
+    }
+    if (isReservedMemberName(trimmed)) {
+      throw ArgumentError.value(name, 'name', '「自分」「パートナー」は使えません。なまえ等を入れてください');
+    }
     final member = Member('mem_${Device.newId()}', trimmed);
     members.add(member);
     storage?.saveMemberNames({for (final m in members) m.id: m.name});
     _markMemberPending(member);
     notifyListeners();
     return member;
+  }
+
+  /// 同じ人物IDで書いた端末の一覧。2台以上なら重複利用の疑い。
+  Map<String, Set<String>> get memberDevices {
+    final map = <String, Set<String>>{};
+    for (final op in ops) {
+      final member = op.memberId;
+      if (member == null || member.isEmpty) continue;
+      map
+          .putIfAbsent(canonicalMemberId(member), () => <String>{})
+          .add(op.deviceId);
+    }
+    return map;
+  }
+
+  /// 重複利用の疑いがある人物の表示。なければ空。
+  List<String> get duplicateMemberLabels => [
+    for (final entry in memberDevices.entries)
+      if (entry.value.length > 1) assigneeWord(entry.key),
+  ];
+
+  /// 未完了の案件を担当しているかどうか。
+  bool hasOpenAssignment(String id) {
+    id = canonicalMemberId(id);
+    return _issues.any(
+      (issue) =>
+          !issue.isDone &&
+          issue.assigneeId != null &&
+          canonicalMemberId(issue.assigneeId!) == id,
+    );
+  }
+
+  /// 重複した人をまとめる。旧IDは対応表に残し、担当・履歴の見え方は維持する。
+  /// 担当中の人でもまとめられる（対応表で引き継ぐ）。削除とはここが違う。
+  /// 家への送信は手順3（[SyncSession] が pendingMemberAliases を送る）。
+  /// 自分・存在しないIDはまとめられない。
+  bool mergeMembers(String fromId, String intoId) {
+    fromId = canonicalMemberId(fromId);
+    intoId = canonicalMemberId(intoId);
+    if (fromId == intoId) return false;
+    if (fromId == canonicalMemberId(meId)) return false;
+    if (memberById(fromId) == null || memberById(intoId) == null) {
+      return false;
+    }
+    legacyMemberAliases[fromId] = intoId;
+    pendingMemberAliases[fromId] = intoId;
+    members.removeWhere((m) => m.id == fromId);
+    pendingMemberNames.remove(fromId);
+    storage?.saveMemberAliases(legacyMemberAliases);
+    storage?.savePendingMemberAliases(pendingMemberAliases);
+    storage?.saveMemberNames({for (final m in members) m.id: m.name});
+    storage?.savePendingMemberNames(pendingMemberNames);
+    meId = canonicalMemberId(meId);
+    _rebuild();
+    notifyListeners();
+    return true;
+  }
+
+  /// 使っていない人を名簿から外す。未完了の担当・自分は外せない。
+  bool removeMember(String id) {
+    id = canonicalMemberId(id);
+    if (memberById(id) == null) return false;
+    if (id == canonicalMemberId(meId)) return false;
+    if (hasOpenAssignment(id)) return false;
+    members.removeWhere((m) => m.id == id);
+    pendingMemberNames.remove(id);
+    pendingMemberRemovals.add(id);
+    storage?.saveMemberNames({for (final m in members) m.id: m.name});
+    storage?.savePendingMemberNames(pendingMemberNames);
+    storage?.savePendingMemberRemovals(pendingMemberRemovals);
+    _rebuild();
+    notifyListeners();
+    return true;
+  }
+
+  /// 送り残した削除を消す（送信済み）。
+  void markMemberRemovalSynced(String id) {
+    if (!pendingMemberRemovals.remove(id)) return;
+    storage?.savePendingMemberRemovals(pendingMemberRemovals);
+    notifyListeners();
+  }
+
+  /// 送り残した統合を消す（送信済み）。
+  void markMemberAliasSynced(String fromId) {
+    if (pendingMemberAliases.remove(fromId) == null) return;
+    storage?.savePendingMemberAliases(pendingMemberAliases);
+    notifyListeners();
   }
 
   void _markMemberPending(Member member) {
@@ -180,7 +307,9 @@ class IssueStore extends ChangeNotifier {
       ..addAll(
         {
           for (final m in directory.members)
-            m.id: Member(m.id, pendingMemberNames[m.id] ?? m.name),
+            // 家に削除が届くまで、外した人は出さない。
+            if (!pendingMemberRemovals.contains(m.id))
+              m.id: Member(m.id, pendingMemberNames[m.id] ?? m.name),
           for (final entry in pendingMemberNames.entries)
             entry.key: Member(entry.key, entry.value),
         }.values,

@@ -199,6 +199,23 @@ class SyncSession extends ChangeNotifier {
           }
           directory = await api.getMembers();
         }
+        // 送り残した統合・削除も、同じ回で家に届ける。
+        for (final entry in Map<String, String>.of(
+          store.pendingMemberAliases,
+        ).entries) {
+          await api.mergeMembers(entry.key, entry.value);
+          _checkOpen();
+          if (store.pendingMemberAliases[entry.key] == entry.value) {
+            store.markMemberAliasSynced(entry.key);
+          }
+        }
+        for (final id in Set<String>.of(store.pendingMemberRemovals)) {
+          await api.removeMember(id);
+          _checkOpen();
+          if (store.pendingMemberRemovals.contains(id)) {
+            store.markMemberRemovalSynced(id);
+          }
+        }
         _checkOpen();
         // 通信中に改名したものを、古い応答で戻さない。
         store.applyMemberDirectory(
