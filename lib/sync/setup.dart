@@ -20,7 +20,10 @@ class HouseholdSetup {
   static String newHouseholdId([Random? random]) {
     final r = random ?? Random.secure();
     final suffix = String.fromCharCodes(
-      List<int>.generate(22, (_) => _alphabet.codeUnitAt(r.nextInt(_alphabet.length))),
+      List<int>.generate(
+        22,
+        (_) => _alphabet.codeUnitAt(r.nextInt(_alphabet.length)),
+      ),
     );
     return 'hh_$suffix';
   }
@@ -70,7 +73,8 @@ class HouseholdSetup {
     required String token,
     SyncCredentials? saved,
   }) {
-    final same = saved != null &&
+    final same =
+        saved != null &&
         saved.baseUrl == baseUrl &&
         saved.householdId == householdId &&
         saved.token == token;

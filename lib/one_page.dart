@@ -7,6 +7,7 @@ import 'format.dart';
 import 'model.dart';
 import 'one_link.dart';
 import 'store.dart';
+import 'write_guard.dart';
 import 'sync/api.dart';
 import 'sync/session.dart';
 
@@ -36,10 +37,14 @@ class _OnePageState extends State<OnePage> {
   /// この人（アプリを入れていない相手）の端末id。**保存しない**ので、開くたびに新しくなる。
   /// 推測できない長さにして、世帯の記録とぶつからないようにする。
   /// 書いた人の記録は、リンクで決めたメンバーとして残す。
-  late final IssueStore _store =
-      IssueStore(deviceId: _guestId(), clock: widget.clock, initialMeId: widget.link.memberId);
+  late final IssueStore _store = IssueStore(
+    deviceId: _guestId(),
+    clock: widget.clock,
+    initialMeId: widget.link.memberId,
+  );
 
-  late final SyncApi _api = widget.api ??
+  late final SyncApi _api =
+      widget.api ??
       SyncApi(
         baseUrl: widget.link.baseUrl,
         householdId: widget.link.householdId,
@@ -82,7 +87,11 @@ class _OnePageState extends State<OnePage> {
       setState(() => _stage = _Stage.done);
       return;
     }
-    setState(() => _stage = issue.assigneeId == widget.link.memberId ? _Stage.accepted : _Stage.ready);
+    setState(
+      () => _stage = issue.assigneeId == widget.link.memberId
+          ? _Stage.accepted
+          : _Stage.ready,
+    );
   }
 
   /// 「やる」。担当を引き受けたことをopとして書いて、その場で送る。
@@ -91,7 +100,12 @@ class _OnePageState extends State<OnePage> {
   /// 押し直すたびに同じ担当のopが増えると、相手の履歴にも同じ行が並んでしまう。
   Future<void> _take() async {
     if (_store.byId(widget.link.issueId)?.assigneeId != widget.link.memberId) {
-      _store.setAssignee(widget.link.issueId, widget.link.memberId);
+      if (!guardWrite(
+        context,
+        () => _store.setAssignee(widget.link.issueId, widget.link.memberId),
+      )) {
+        return;
+      }
     }
     try {
       await _session.pushNow();
@@ -114,21 +128,46 @@ class _OnePageState extends State<OnePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('いえこと', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              Text(
+                'いえこと',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
               const SizedBox(height: 26),
               if (issue == null)
-                Text(_messageForNothing(scheme), style: const TextStyle(fontSize: 18, height: 1.4))
+                Text(
+                  _messageForNothing(scheme),
+                  style: const TextStyle(fontSize: 18, height: 1.4),
+                )
               else
                 Text(
                   issue.title,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, height: 1.35),
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
                 ),
               if (issue != null) ...[
                 const SizedBox(height: 12),
-                Text(_metaLine(issue), style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant)),
+                Text(
+                  _metaLine(issue),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
               ],
               const Spacer(),
-              Text(_message(scheme), style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant)),
+              Text(
+                _message(scheme),
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
               const SizedBox(height: 14),
               ..._actions(scheme),
             ],
@@ -139,21 +178,21 @@ class _OnePageState extends State<OnePage> {
   }
 
   String _messageForNothing(ColorScheme scheme) => switch (_stage) {
-        _Stage.loading => '読み込んでいます',
-        _Stage.offline => 'つながりませんでした。電波の良いところでもう一度どうぞ',
-        _ => 'この1件は、もう終わったか消えています',
-      };
+    _Stage.loading => '読み込んでいます',
+    _Stage.offline => 'つながりませんでした。電波の良いところでもう一度どうぞ',
+    _ => 'この1件は、もう終わったか消えています',
+  };
 
   String _message(ColorScheme scheme) => switch (_stage) {
-        _Stage.loading => '',
-        _Stage.ready => '自分の担当にできます',
-        _Stage.accepted => '引き受けました。送った人にも伝わります',
-        _Stage.pending => '引き受けました。いまは送れませんでした',
-        _Stage.later => 'また今度で大丈夫です',
-        _Stage.done => 'もう終わっています',
-        _Stage.gone => '',
-        _Stage.offline => '',
-      };
+    _Stage.loading => '',
+    _Stage.ready => '自分の担当にできます',
+    _Stage.accepted => '引き受けました。送った人にも伝わります',
+    _Stage.pending => '引き受けました。いまは送れませんでした',
+    _Stage.later => 'また今度で大丈夫です',
+    _Stage.done => 'もう終わっています',
+    _Stage.gone => '',
+    _Stage.offline => '',
+  };
 
   /// 押せるものは、状態で決まる。1件リンクに、それ以外の操作は出さない。
   List<Widget> _actions(ColorScheme scheme) {

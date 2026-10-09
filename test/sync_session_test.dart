@@ -6,6 +6,7 @@ import 'package:ie_koto/store.dart';
 import 'package:ie_koto/sync/api.dart';
 import 'package:ie_koto/sync/log.dart';
 import 'package:ie_koto/sync/session.dart';
+import 'package:ie_koto/sync/wire.dart';
 
 import 'support/ops_server.dart';
 
@@ -31,6 +32,75 @@ void main() {
     sessionA.detach();
     sessionB.detach();
     await server.stop();
+  });
+
+  test('上限定期完了の次回生成を拒否しても受信とcursorを保持する', () async {
+    final at = DateTime(2026, 10, 9);
+    server.ops.addAll(
+      encodeOps([
+        Op(
+          deviceId: 'remote',
+          lamport: 1,
+          kind: OpKind.add,
+          issueId: 'remote:1',
+          at: at,
+          data: {'title': '毎日', 'recurrence': Recurrence.daily},
+        ),
+        Op(
+          deviceId: 'remote',
+          lamport: 2147483647,
+          kind: OpKind.complete,
+          issueId: 'remote:1',
+          at: at,
+        ),
+      ]),
+    );
+    await expectLater(
+      sessionA.syncNow(),
+      throwsA(isA<ClockExhaustedException>()),
+    );
+    expect(sessionA.cursor, 2);
+    expect(sessionA.lastError, isA<ClockExhaustedException>());
+    expect(a.ops, hasLength(2));
+    expect(a.byId('remote:1')!.isDone, isTrue);
+    expect(a.outbox, isEmpty);
+    await expectLater(
+      sessionA.syncNow(),
+      throwsA(isA<ClockExhaustedException>()),
+    );
+    expect(sessionA.cursor, 2);
+    expect(a.ops, hasLength(2));
+    expect(a.all, hasLength(1));
+    expect(server.posts, 0);
+  });
+
+  test('HTTPで最大時計を受信しても読み取り同期は繰り返せる', () async {
+    server.ops.add(
+      encodeOp(
+        Op(
+          deviceId: 'remote',
+          lamport: 2147483647,
+          kind: OpKind.add,
+          issueId: 'remote:2147483647',
+          at: DateTime(2026, 10, 9),
+          data: {'title': '上限でも読む'},
+        ),
+      ),
+    );
+    final first = await sessionA.syncNow();
+    expect(first.received, 1);
+    expect(a.all.single.title, '上限でも読む');
+    expect(sessionA.cursor, 1);
+    expect(a.outbox, isEmpty);
+    expect(
+      () => a.comment('remote:2147483647', '拒否'),
+      throwsA(isA<ClockExhaustedException>()),
+    );
+    final second = await sessionA.syncNow();
+    expect(second.received, 0);
+    expect(sessionA.lastError, isNull);
+    expect(server.posts, 0);
+    expect(a.ops, hasLength(1));
   });
 
   test('片方が追加すると、相手の同期で出てくる（送り返さない）', () async {
@@ -64,7 +134,11 @@ void main() {
   });
 
   test('完了すると、相手にも同じ「次の1件」が出る', () async {
-    a.add(title: 'お風呂そうじ', dueDate: DateTime(2026, 10, 6), recurrence: Recurrence.daily);
+    a.add(
+      title: 'お風呂そうじ',
+      dueDate: DateTime(2026, 10, 6),
+      recurrence: Recurrence.daily,
+    );
     await sessionA.syncNow();
     await sessionB.syncNow();
 
@@ -74,7 +148,9 @@ void main() {
     await sessionA.syncNow();
 
     // どちらの端末でも、次の1件は「決定的なid」で1つだけ。
-    final nextId = nextIssueId(b.ops.firstWhere((op) => op.kind == OpKind.complete).id);
+    final nextId = nextIssueId(
+      b.ops.firstWhere((op) => op.kind == OpKind.complete).id,
+    );
     expect(a.byId(nextId)?.isDone, isFalse);
     expect(b.byId(nextId)?.isDone, isFalse);
     expect(a.openIssues.map((issue) => issue.id), <String>[nextId]);
@@ -84,7 +160,11 @@ void main() {
   });
 
   test('2台が別々に完了しても、見えている未完了は1つだけ', () async {
-    a.add(title: 'ゴミ出し', dueDate: DateTime(2026, 10, 6), recurrence: Recurrence.daily);
+    a.add(
+      title: 'ゴミ出し',
+      dueDate: DateTime(2026, 10, 6),
+      recurrence: Recurrence.daily,
+    );
     await sessionA.syncNow();
     await sessionB.syncNow();
 
@@ -99,12 +179,20 @@ void main() {
 
     expect(a.openIssues, hasLength(1));
     expect(b.openIssues, hasLength(1));
-    expect(a.openIssues.single.id, b.openIssues.single.id, reason: '同じopを元にしているので同じidになる');
+    expect(
+      a.openIssues.single.id,
+      b.openIssues.single.id,
+      reason: '同じopを元にしているので同じidになる',
+    );
     expect(_view(b), _view(a));
   });
 
   test('取り消すと、相手側の「次の1件」も消える', () async {
-    final bath = a.add(title: 'お風呂そうじ', dueDate: DateTime(2026, 10, 6), recurrence: Recurrence.daily);
+    final bath = a.add(
+      title: 'お風呂そうじ',
+      dueDate: DateTime(2026, 10, 6),
+      recurrence: Recurrence.daily,
+    );
     await sessionA.syncNow();
     await sessionB.syncNow();
 
@@ -120,7 +208,11 @@ void main() {
 
     expect(a.byId(bath.id)?.isDone, isFalse);
     expect(b.byId(bath.id)?.isDone, isFalse);
-    expect(a.byId(bath.id)?.generatedNextId, isNull, reason: '自動生成した次の1件は見えなくなる');
+    expect(
+      a.byId(bath.id)?.generatedNextId,
+      isNull,
+      reason: '自動生成した次の1件は見えなくなる',
+    );
     expect(a.openIssues.map((issue) => issue.id), <String>[bath.id]);
     expect(_view(b), _view(a));
   });
@@ -131,7 +223,9 @@ void main() {
     a.add(title: '牛乳を買う');
     await expectLater(
       sessionA.syncNow(),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'server')),
+      throwsA(
+        isA<SyncException>().having((error) => error.code, 'code', 'server'),
+      ),
     );
 
     expect(a.all, hasLength(1), reason: 'ローカルでは、ちゃんと見えている');
@@ -158,7 +252,8 @@ void main() {
     a.add(title: '牛乳を買う');
     expect(server.ops, isEmpty, reason: 'すぐには送らない（まとめて送る）');
 
-    await _waitUntil(() => server.ops.isNotEmpty);
+    // Receipt precedes the HTTP response: wait for client acknowledgement too.
+    await _waitUntil(() => server.ops.isNotEmpty && a.outbox.isEmpty);
     expect(server.ops, hasLength(1));
     expect(a.outbox, isEmpty);
   });
@@ -187,7 +282,15 @@ void main() {
     await sessionA.syncNow();
 
     server.injectedOps = <Map<String, Object?>>[
-      <String, Object?>{'id': 'X:1', 'deviceId': 'X', 'lamport': 1, 'kind': 'add', 'issueId': 'X:1', 'at': '2026-10-06T08:00:00.000', 'data': <String, Object?>{}},
+      <String, Object?>{
+        'id': 'X:1',
+        'deviceId': 'X',
+        'lamport': 1,
+        'kind': 'add',
+        'issueId': 'X:1',
+        'at': '2026-10-06T08:00:00.000',
+        'data': <String, Object?>{},
+      },
     ];
 
     final outcome = await sessionB.syncNow();
@@ -200,7 +303,9 @@ void main() {
   test('3台が交互に書いても、同期を回せば全員同じ画面になる', () async {
     final random = Random(20261006);
     final stores = <IssueStore>[_store('A'), _store('B'), _store('C')];
-    final sessions = <SyncSession>[for (final store in stores) _session(store, server)];
+    final sessions = <SyncSession>[
+      for (final store in stores) _session(store, server),
+    ];
     addTearDown(() {
       for (final session in sessions) {
         session.detach();
@@ -231,7 +336,9 @@ void main() {
             store.setStatus(issue.id, IssueStatus.waiting);
         }
       }
-      if (random.nextBool()) await sessions[random.nextInt(sessions.length)].syncNow();
+      if (random.nextBool()) {
+        await sessions[random.nextInt(sessions.length)].syncNow();
+      }
     }
 
     // 全員を何周か同期させれば、必ず同じ状態になる。
@@ -246,7 +353,11 @@ void main() {
     for (final store in stores.skip(1)) {
       expect(_view(store), expected, reason: '${store.deviceId} が一致しない');
     }
-    expect(server.ops, hasLength(stores.first.ops.length), reason: '全員が同じop集合を持つ');
+    expect(
+      server.ops,
+      hasLength(stores.first.ops.length),
+      reason: '全員が同じop集合を持つ',
+    );
   });
 }
 
@@ -254,28 +365,31 @@ IssueStore _store(String deviceId) =>
     IssueStore(deviceId: deviceId, clock: () => DateTime(2026, 10, 6, 8));
 
 SyncApi _api(OpsServer server) => SyncApi(
-      baseUrl: server.baseUrl,
-      householdId: 'hh_test00000000000000000000000',
-      token: server.token,
-    );
+  baseUrl: server.baseUrl,
+  householdId: 'hh_test00000000000000000000000',
+  token: server.token,
+);
 
 SyncSession _session(IssueStore store, OpsServer server) =>
     SyncSession(store: store, api: _api(server));
 
 /// 画面に出ているものの要約。これが一致すれば、どの端末でも同じに見えている。
 Map<String, String> _view(IssueStore store) => <String, String>{
-      for (final issue in store.all)
-        issue.id: <String>[
-          issue.title,
-          issue.status.name,
-          issue.dueDate?.toIso8601String() ?? '-',
-          issue.recurrence.label,
-          issue.assigneeId ?? '-',
-          issue.seriesKey,
-          issue.events.where((event) => event.kind == EventKind.comment).map((event) => event.text).join(','),
-          '${issue.events.length}',
-        ].join('|'),
-    };
+  for (final issue in store.all)
+    issue.id: <String>[
+      issue.title,
+      issue.status.name,
+      issue.dueDate?.toIso8601String() ?? '-',
+      issue.recurrence.label,
+      issue.assigneeId ?? '-',
+      issue.seriesKey,
+      issue.events
+          .where((event) => event.kind == EventKind.comment)
+          .map((event) => event.text)
+          .join(','),
+      '${issue.events.length}',
+    ].join('|'),
+};
 
 Future<void> _waitUntil(bool Function() condition) async {
   for (var i = 0; i < 100; i++) {

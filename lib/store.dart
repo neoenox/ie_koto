@@ -22,20 +22,29 @@ class IssueStore extends ChangeNotifier {
     List<Member>? members,
     String? initialMeId,
     Map<String, String> legacyMemberAliases = const {},
+    bool startAlone = false,
   }) {
     final saved = storage?.load();
+    final savedNames = saved?.memberNames ?? const <String, String>{};
+    final pendingNames = saved?.pendingMemberNames ?? const <String, String>{};
+    // memberNames自体を名簿として復元する。初期2人への上書きだけでは
+    // 共有IDと追加メンバーがオフライン起動で消えてしまう。
     final base =
         members ??
-        (saved != null && saved.memberNames.isNotEmpty
+        (savedNames.isNotEmpty
             ? [
-                for (final entry in saved.memberNames.entries)
+                for (final entry in savedNames.entries)
                   Member(entry.key, entry.value),
               ]
+            : startAlone
+            ? const [Member('me', '自分')]
             : const [Member('me', '自分'), Member('partner', 'パートナー')]);
-    // 保存済みの世帯名を一時表示し、接続後に共有名簿で更新する。
-    final named = [
-      for (final m in base) Member(m.id, saved?.memberNames[m.id] ?? m.name),
-    ];
+    final named = <String, Member>{
+      for (final m in base)
+        m.id: Member(m.id, pendingNames[m.id] ?? savedNames[m.id] ?? m.name),
+      for (final entry in pendingNames.entries)
+        entry.key: Member(entry.key, entry.value),
+    }.values.toList();
     final store = IssueStore._(
       clock: clock,
       householdName: householdName,
@@ -154,6 +163,7 @@ class IssueStore extends ChangeNotifier {
   void markMemberSynced(String id) {
     pendingMemberNames.remove(id);
     storage?.savePendingMemberNames(pendingMemberNames);
+    notifyListeners();
   }
 
   Map<String, String> get legacyMemberNames => {
@@ -167,7 +177,14 @@ class IssueStore extends ChangeNotifier {
     applyMemberAliases(directory.aliases);
     members
       ..clear()
-      ..addAll(directory.members);
+      ..addAll(
+        {
+          for (final m in directory.members)
+            m.id: Member(m.id, pendingMemberNames[m.id] ?? m.name),
+          for (final entry in pendingMemberNames.entries)
+            entry.key: Member(entry.key, entry.value),
+        }.values,
+      );
     if (members.isEmpty) members.add(Member(meId, '自分'));
     if (!members.any((member) => member.id == meId)) {
       members.add(Member(meId, '自分'));
@@ -215,6 +232,8 @@ class IssueStore extends ChangeNotifier {
         for (final entry in pending.entries)
           canonicalMemberId(entry.key): entry.value,
       });
+    storage?.saveMemberAliases(legacyMemberAliases);
+    storage?.saveMemberNames({for (final m in members) m.id: m.name});
     storage?.savePendingMemberNames(pendingMemberNames);
     storage?.saveMeId(meId);
     storage?.saveMemberAliases(legacyMemberAliases);
@@ -264,6 +283,7 @@ class IssueStore extends ChangeNotifier {
     _device.markSent(ops);
     storage?.savePushedThrough(_device.pushedThrough);
     storage?.savePendingRelayIds(_device.pendingRelayIds);
+    notifyListeners();
   }
 
   /// 自分で書いた直後に呼ばれる（同期の自動送信の入口）。
@@ -556,8 +576,10 @@ class IssueStore extends ChangeNotifier {
 
   /// opを書いて、足りない「次の1件」を補い、画面を作り直す。書き込みは必ずここを通す。
   void _commit(void Function() writes) {
-    writes();
-    writeMissingFollowUps(project(_device.log), _device, at: now);
+    _device.writeAtomically(() {
+      writes();
+      writeMissingFollowUps(project(_device.log), _device, at: now);
+    });
     _rebuild();
     _save();
     notifyListeners();

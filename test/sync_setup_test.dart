@@ -25,13 +25,21 @@ void main() {
       expect(RegExp(r'\s').hasMatch(token), isFalse);
     }
     // 毎回違うものが出る（推測できない乱数であること）。
-    final ids = <String>{for (var i = 0; i < 20; i++) HouseholdSetup.newHouseholdId()};
+    final ids = <String>{
+      for (var i = 0; i < 20; i++) HouseholdSetup.newHouseholdId(),
+    };
     expect(ids, hasLength(20));
   });
 
   test('場所はhttp(s)だけ受け付ける', () {
-    expect(HouseholdSetup.normalizeBaseUrl('https://example.workers.dev/'), 'https://example.workers.dev');
-    expect(HouseholdSetup.normalizeBaseUrl('http://127.0.0.1:8799'), 'http://127.0.0.1:8799');
+    expect(
+      HouseholdSetup.normalizeBaseUrl('https://example.workers.dev/'),
+      'https://example.workers.dev',
+    );
+    expect(
+      HouseholdSetup.normalizeBaseUrl('http://127.0.0.1:8799'),
+      'http://127.0.0.1:8799',
+    );
     expect(HouseholdSetup.normalizeBaseUrl('ftp://example.com'), isNull);
     expect(HouseholdSetup.normalizeBaseUrl('example.com'), isNull);
     expect(HouseholdSetup.normalizeBaseUrl(''), isNull);
@@ -40,10 +48,18 @@ void main() {
   test('欠けた入力は理由とともに断る', () {
     expect(HouseholdSetup.validateHouseholdId(''), isNotNull);
     expect(HouseholdSetup.validateHouseholdId('short'), isNotNull);
-    expect(HouseholdSetup.validateHouseholdId('hh_abcdefghijklmnopqrstuv'), isNull);
+    expect(
+      HouseholdSetup.validateHouseholdId('hh_abcdefghijklmnopqrstuv'),
+      isNull,
+    );
     expect(HouseholdSetup.validateToken(''), isNotNull);
     expect(HouseholdSetup.validateToken('short'), isNotNull);
-    expect(HouseholdSetup.validateToken('8f3c1d5e7a9b2c4d6e8f0a1b3c5d7e9f2a4b6c8d0e'), isNull);
+    expect(
+      HouseholdSetup.validateToken(
+        '8f3c1d5e7a9b2c4d6e8f0a1b3c5d7e9f2a4b6c8d0e',
+      ),
+      isNull,
+    );
   });
 
   test('同じ世帯ならcursorを引き継ぎ、変わったら0に戻す', () {
@@ -96,7 +112,11 @@ void main() {
     final b = IssueStore(deviceId: 'B', clock: () => DateTime(2026, 10, 6, 8));
     b.receive(a.ops);
 
-    final comments = b.byId(milk.id)!.events.where((e) => e.kind == EventKind.comment).toList();
+    final comments = b
+        .byId(milk.id)!
+        .events
+        .where((e) => e.kind == EventKind.comment)
+        .toList();
     expect(comments, hasLength(1));
     expect(comments.single.actorId, 'partner');
     expect(b.memberById(comments.single.actorId)?.name, 'パートナー');
@@ -113,7 +133,9 @@ void main() {
     expect(second.deviceId, 'A', reason: '端末idは残っている方を使う');
     expect(second.meId, 'partner');
     expect(second.memberById('partner')?.name, 'あいぼう');
-    expect(second.pendingMemberNames, {'partner': 'あいぼう'}, reason: '接続前の名前変更は同期待ちで残る');
+    expect(second.pendingMemberNames, {
+      'partner': 'あいぼう',
+    }, reason: '接続前の名前変更は同期待ちで残る');
   });
 
   test('1件リンクは期限を過ぎると読まない', () {
@@ -135,16 +157,25 @@ void main() {
     expect(OneLink.fromUri(Uri.parse(dated.text), now: now)?.issueId, 'A:1');
     expect(OneLink.fromUri(Uri.parse(base.text), now: now)?.issueId, 'A:1');
     // 過ぎたら読まない。壊れた期限も読まない。
-    expect(OneLink.fromUri(Uri.parse(dated.text), now: now.add(const Duration(days: 8))), isNull);
+    expect(
+      OneLink.fromUri(
+        Uri.parse(dated.text),
+        now: now.add(const Duration(days: 8)),
+      ),
+      isNull,
+    );
     final broken = dated.text.replaceAll(RegExp(r'e=\d+'), 'e=not-a-time');
     expect(OneLink.fromUri(Uri.parse(broken), now: now), isNull);
   });
 
   test('お知らせは1行だけ（すぎたもの・今日の自分）', () {
-    final store = IssueStore(deviceId: 'A', clock: () => DateTime(2026, 10, 6, 8));
+    final store = IssueStore(
+      deviceId: 'A',
+      clock: () => DateTime(2026, 10, 6, 8),
+    );
     expect(noticeLineFor(store), isNull, reason: 'なければ行を出さない');
     final milk = store.add(title: '牛乳を買う', dueDate: DateTime(2026, 10, 5));
-    expect(noticeLineFor(store), contains('すぎているものが1件'));
+    expect(noticeLineFor(store), contains('すぎたものが1件'));
     store.setAssignee(milk.id, 'me');
     expect(noticeLineFor(store), contains('今日の自分は1件'));
   });

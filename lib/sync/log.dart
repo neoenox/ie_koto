@@ -11,7 +11,18 @@ import '../model.dart';
 /// - 「次の1件」の id を、元になった完了opから決定的に導く（`next:<opId>`）
 ///   → 2台が別々に完了しても、同じ id になるので1件に畳まれる
 
-enum OpKind { add, rename, assignee, due, recurrence, status, comment, complete, reopen, delete }
+enum OpKind {
+  add,
+  rename,
+  assignee,
+  due,
+  recurrence,
+  status,
+  comment,
+  complete,
+  reopen,
+  delete,
+}
 
 class Op {
   Op({
@@ -23,8 +34,8 @@ class Op {
     Map<String, Object?>? data,
     this.derivedFrom,
     this.memberId,
-  })  : id = '$deviceId:$lamport',
-        data = data == null ? const <String, Object?>{} : Map.unmodifiable(data);
+  }) : id = '$deviceId:$lamport',
+       data = data == null ? const <String, Object?>{} : Map.unmodifiable(data);
 
   /// 端末ごとに一意。端末idと論理時計の組で決まる。
   final String id;
@@ -51,12 +62,49 @@ class Op {
   String toString() => '$id ${kind.name}($issueId)';
 }
 
+/// 同期可能な時計を使い切った。既存ログを変更せず書込みを止める。
+class ClockExhaustedException extends StateError {
+  ClockExhaustedException()
+    : super('記録の上限に達したため変更できません。入力内容を控え、家族とつなげるの「書き出す」で記録を残して家族に相談してください。');
+}
+
 /// 1台の端末。オフラインで書き、あとで送る。
 class Device {
+  static const maxLamport = 2147483647;
+
+  void _ensureWritable() {
+    if (_lamport >= maxLamport) throw ClockExhaustedException();
+  }
+
+  /// 同期的なwriteだけをまとめる。失敗時はこのまとまりの追加を全て戻す。
+  /// receive・ack・保存や非同期処理をこのcallback内で行わないこと。
+  void writeAtomically(void Function() writes) {
+    final previousLamport = _lamport;
+    final previousClock = _clock;
+    final logLength = log.length;
+    final outboxLength = outbox.length;
+    try {
+      writes();
+    } catch (_) {
+      for (final op in log.skip(logLength)) {
+        _known.remove(op.id);
+      }
+      log.length = logLength;
+      outbox.length = outboxLength;
+      _lamport = previousLamport;
+      _clock = previousClock;
+      rethrow;
+    }
+  }
+
   static String newId() {
     final random = Random.secure();
-    return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+    return List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
   }
+
   Device(this.id);
 
   final String id;
@@ -84,7 +132,10 @@ class Device {
 
   /// 次に書くopのid。案件idは、それを生んだopのidから取る（端末をまたいでも衝突しない）。
   /// 書き込みの直前に呼んで、そのopをそのまま書くこと。
-  String nextOpId() => '$id:${_lamport + 1}';
+  String nextOpId() {
+    _ensureWritable();
+    return '$id:${_lamport + 1}';
+  }
 
   Op write(
     OpKind kind,
@@ -94,6 +145,7 @@ class Device {
     DateTime? at,
     String? memberId,
   }) {
+    _ensureWritable();
     _lamport += 1;
     final now = at ?? _clock.add(const Duration(minutes: 1));
     _clock = now;
@@ -126,12 +178,22 @@ class Device {
   ///
   /// 送信待ちは「自分が書いたopのうち、サーバーが確認していないもの」だけ。
   /// 相手のopは送り返さないし、確認済みの自分のopも送り直さない。
-  void restore(Iterable<Op> saved, {int pushedThrough = 0, Set<String> pendingRelayIds = const <String>{}}) {
+  void restore(
+    Iterable<Op> saved, {
+    int pushedThrough = 0,
+    Set<String> pendingRelayIds = const <String>{},
+  }) {
     receive(saved);
     _pushedThrough = pushedThrough < 0 ? 0 : pushedThrough;
     outbox
       ..clear()
-      ..addAll(log.where((op) => (op.deviceId == id && op.lamport > _pushedThrough) || pendingRelayIds.contains(op.id)));
+      ..addAll(
+        log.where(
+          (op) =>
+              (op.deviceId == id && op.lamport > _pushedThrough) ||
+              pendingRelayIds.contains(op.id),
+        ),
+      );
     this.pendingRelayIds
       ..clear()
       ..addAll(pendingRelayIds.where(_known.contains));
@@ -139,7 +201,8 @@ class Device {
 
   void queueForRelay(Iterable<Op> ops) {
     for (final op in ops) {
-      if (_known.contains(op.id) && !outbox.any((queued) => queued.id == op.id)) {
+      if (_known.contains(op.id) &&
+          !outbox.any((queued) => queued.id == op.id)) {
         pendingRelayIds.add(op.id);
         outbox.add(op);
       }
@@ -165,7 +228,9 @@ class Device {
     pendingRelayIds.removeAll(sent);
     // 自分のopがどこまで届いたかを覚えておく（端末に残すのは呼ぶ側）。
     for (final op in ops) {
-      if (op.deviceId == id && op.lamport > _pushedThrough) _pushedThrough = op.lamport;
+      if (op.deviceId == id && op.lamport > _pushedThrough) {
+        _pushedThrough = op.lamport;
+      }
     }
   }
 }
@@ -204,8 +269,9 @@ class Task {
   String? standingCompletionOpId;
 
   /// この完了から生まれた「次の1件」のid。
-  String? get generatedNextId =>
-      standingCompletionOpId == null ? null : nextIssueId(standingCompletionOpId!);
+  String? get generatedNextId => standingCompletionOpId == null
+      ? null
+      : nextIssueId(standingCompletionOpId!);
 
   /// いま有効な完了の時刻（端末の時計。表示と次回の計算にだけ使う）。
   DateTime? get completedAt {
@@ -220,7 +286,8 @@ class Task {
   final List<String> comments = <String>[];
   final List<Op> history = <Op>[];
 
-  bool get isOpen => !deleted && !orphaned && !superseded && status != IssueStatus.done;
+  bool get isOpen =>
+      !deleted && !orphaned && !superseded && status != IssueStatus.done;
   bool get isDerived => derivedFrom != null;
   bool get isVisible => !deleted && !orphaned && !superseded;
 }
@@ -264,7 +331,8 @@ Map<String, Task> project(Iterable<Op> ops) {
         if (task.title.isEmpty) {
           task.addOrder = index;
           task.title = (op.data['title'] as String?) ?? '';
-          task.recurrence = (op.data['recurrence'] as Recurrence?) ?? Recurrence.none;
+          task.recurrence =
+              (op.data['recurrence'] as Recurrence?) ?? Recurrence.none;
           task.dueDate = op.data['dueDate'] as DateTime?;
           task.assigneeId = op.data['assigneeId'] as String?;
           task.seriesId = (op.data['seriesId'] as String?) ?? op.issueId;
@@ -278,7 +346,8 @@ Map<String, Task> project(Iterable<Op> ops) {
       case OpKind.due:
         task.dueDate = op.data['dueDate'] as DateTime?;
       case OpKind.recurrence:
-        task.recurrence = (op.data['recurrence'] as Recurrence?) ?? Recurrence.none;
+        task.recurrence =
+            (op.data['recurrence'] as Recurrence?) ?? Recurrence.none;
       case OpKind.comment:
         final text = op.data['text'] as String?;
         if (text != null && text.isNotEmpty) task.comments.add(text);
@@ -312,7 +381,10 @@ Map<String, Task> project(Iterable<Op> ops) {
     ..sort((a, b) => a.addOrder.compareTo(b.addOrder));
   for (final task in derived) {
     final origin = tasks[task.originIssueId];
-    final alive = origin != null && !origin.orphaned && origin.standingCompletionOpId == task.derivedFrom;
+    final alive =
+        origin != null &&
+        !origin.orphaned &&
+        origin.standingCompletionOpId == task.derivedFrom;
     task.orphaned = !alive;
   }
 
@@ -364,22 +436,28 @@ List<Op> writeMissingFollowUps(
     final nextId = nextIssueId(completion);
     if (tasks[nextId] != null) continue;
 
-    final completedAt = task.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-    final due = task.recurrence.nextDue(completedAt: completedAt, previousDue: task.dueDate);
-    writes.add(device.write(
-      OpKind.add,
-      nextId,
-      data: <String, Object?>{
-        'title': task.title,
-        'dueDate': due,
-        'assigneeId': task.assigneeId,
-        'recurrence': task.recurrence,
-        'seriesId': task.seriesId ?? task.id,
-        'originIssueId': task.id,
-      },
-      derivedFrom: completion,
-      at: at,
-    ));
+    final completedAt =
+        task.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final due = task.recurrence.nextDue(
+      completedAt: completedAt,
+      previousDue: task.dueDate,
+    );
+    writes.add(
+      device.write(
+        OpKind.add,
+        nextId,
+        data: <String, Object?>{
+          'title': task.title,
+          'dueDate': due,
+          'assigneeId': task.assigneeId,
+          'recurrence': task.recurrence,
+          'seriesId': task.seriesId ?? task.id,
+          'originIssueId': task.id,
+        },
+        derivedFrom: completion,
+        at: at,
+      ),
+    );
   }
 
   return writes;

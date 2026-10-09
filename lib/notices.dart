@@ -18,8 +18,8 @@ String? noticeLineFor(IssueStore store) {
     if (isOverdue(due, now)) overdue += 1;
     if (issue.assigneeId != null && issue.assigneeId == store.meId) mine += 1;
   }
-  if (overdue > 0 && mine > 0) return 'すぎているものが$overdue件・今日の自分は$mine件';
-  if (overdue > 0) return 'すぎているものが$overdue件ある';
+  if (overdue > 0 && mine > 0) return 'すぎたもの$overdue件・今日の自分は$mine件';
+  if (overdue > 0) return 'すぎたものが$overdue件ある';
   if (mine > 0) return '今日の自分は$mine件';
   return null;
 }

@@ -31,7 +31,9 @@ void main() {
 
     for (var i = 0; i < 800; i++) {
       final device = devices[random.nextInt(devices.length)];
-      final visible = project(device.log).values.where((t) => t.isVisible).toList();
+      final visible = project(
+        device.log,
+      ).values.where((t) => t.isVisible).toList();
       if (visible.isEmpty || random.nextDouble() < 0.45) {
         _add(random, device, 'task-$i', i);
       } else {
@@ -41,7 +43,10 @@ void main() {
     _syncAll(server, devices);
 
     final forward = mergeOps(devices[0].log, devices[1].log);
-    final reversed = mergeOps(devices[1].log.reversed.toList(), devices[0].log.reversed.toList());
+    final reversed = mergeOps(
+      devices[1].log.reversed.toList(),
+      devices[0].log.reversed.toList(),
+    );
 
     expect(_summary(project(forward)), _summary(project(reversed)));
   });
@@ -57,12 +62,20 @@ List<String> _simulate(int seed) {
 
   for (var step = 0; step < _stepsPerSeed; step++) {
     final device = devices[random.nextInt(devices.length)];
-    final visible = project(device.log).values.where((t) => t.isVisible).toList();
+    final visible = project(
+      device.log,
+    ).values.where((t) => t.isVisible).toList();
 
     if (visible.isEmpty || random.nextDouble() < 0.45) {
       _add(random, device, 'task-${issueSeq++}', step);
     } else {
-      _mutate(random, device, visible[random.nextInt(visible.length)], step, opSeq++);
+      _mutate(
+        random,
+        device,
+        visible[random.nextInt(visible.length)],
+        step,
+        opSeq++,
+      );
     }
 
     // 3割は、誰か1人とだけ合わせる（＝他の端末は知らないまま）
@@ -113,7 +126,10 @@ List<String> _simulate(int seed) {
   for (final task in truth.values.where((t) => t.isVisible)) {
     if (!task.isDerived) continue;
     final origin = truth[task.originIssueId];
-    final ok = origin != null && !origin.orphaned && origin.standingCompletionOpId == task.derivedFrom;
+    final ok =
+        origin != null &&
+        !origin.orphaned &&
+        origin.standingCompletionOpId == task.derivedFrom;
     if (!ok) {
       violations.add('seed=$seed 元を失った派生案件が見えている: ${task.id}');
     }
@@ -149,10 +165,10 @@ void _add(Random random, Device device, String id, int step) {
     0 => Recurrence.none,
     1 => Recurrence.daily,
     2 => Recurrence.onWeekdays({
-        if (random.nextBool()) DateTime.tuesday,
-        if (random.nextBool()) DateTime.friday,
-        if (random.nextBool()) DateTime.sunday,
-      }),
+      if (random.nextBool()) DateTime.tuesday,
+      if (random.nextBool()) DateTime.friday,
+      if (random.nextBool()) DateTime.sunday,
+    }),
     _ => Recurrence.every(7 * (1 + random.nextInt(4))),
   };
   device.write(
@@ -173,21 +189,51 @@ void _mutate(Random random, Device device, Task target, int step, int opSeq) {
 
   switch (random.nextInt(9)) {
     case 0:
-      device.write(OpKind.rename, target.id, data: <String, Object?>{'title': '直した$opSeq'}, at: at);
+      device.write(
+        OpKind.rename,
+        target.id,
+        data: <String, Object?>{'title': '直した$opSeq'},
+        at: at,
+      );
     case 1:
-      device.write(OpKind.assignee, target.id,
-          data: <String, Object?>{'assigneeId': random.nextBool() ? 'partner' : null}, at: at);
+      device.write(
+        OpKind.assignee,
+        target.id,
+        data: <String, Object?>{
+          'assigneeId': random.nextBool() ? 'partner' : null,
+        },
+        at: at,
+      );
     case 2:
-      device.write(OpKind.due, target.id,
-          data: <String, Object?>{'dueDate': DateTime(2026, 11, 1 + random.nextInt(20))}, at: at);
+      device.write(
+        OpKind.due,
+        target.id,
+        data: <String, Object?>{
+          'dueDate': DateTime(2026, 11, 1 + random.nextInt(20)),
+        },
+        at: at,
+      );
     case 3:
-      device.write(OpKind.recurrence, target.id,
-          data: <String, Object?>{'recurrence': Recurrence.every(30)}, at: at);
+      device.write(
+        OpKind.recurrence,
+        target.id,
+        data: <String, Object?>{'recurrence': Recurrence.every(30)},
+        at: at,
+      );
     case 4:
-      device.write(OpKind.comment, target.id, data: <String, Object?>{'text': 'メモ$opSeq'}, at: at);
+      device.write(
+        OpKind.comment,
+        target.id,
+        data: <String, Object?>{'text': 'メモ$opSeq'},
+        at: at,
+      );
     case 5:
-      device.write(OpKind.status, target.id,
-          data: <String, Object?>{'status': IssueStatus.waiting}, at: at);
+      device.write(
+        OpKind.status,
+        target.id,
+        data: <String, Object?>{'status': IssueStatus.waiting},
+        at: at,
+      );
     case 6:
       device.write(OpKind.complete, target.id, at: at);
       _runFollowUps(device, step);
@@ -204,10 +250,10 @@ void _mutate(Random random, Device device, Task target, int step, int opSeq) {
 }
 
 List<Op> _runFollowUps(Device device, int step) => writeMissingFollowUps(
-      project(device.log),
-      device,
-      at: DateTime(2026, 10, 1).add(Duration(minutes: step + 1)),
-    );
+  project(device.log),
+  device,
+  at: DateTime(2026, 10, 1).add(Duration(minutes: step + 1)),
+);
 
 /// 2台だけ合わせる。他の端末は知らないまま。
 void _exchange(List<Op> server, Device a, Device b) {
@@ -229,18 +275,18 @@ void _syncAll(List<Op> server, List<Device> devices) {
 
 /// 目に見える状態の要約。これが一致すれば収束している。
 Map<String, String> _summary(Map<String, Task> tasks) => {
-      for (final task in tasks.values)
-        if (task.isVisible)
-          task.id: [
-            task.title,
-            task.status.name,
-            task.dueDate?.toIso8601String() ?? '-',
-            task.recurrence.label,
-            task.assigneeId ?? '-',
-            task.comments.join(','),
-            task.standingCompletionOpId ?? '-',
-          ].join('|'),
-    };
+  for (final task in tasks.values)
+    if (task.isVisible)
+      task.id: [
+        task.title,
+        task.status.name,
+        task.dueDate?.toIso8601String() ?? '-',
+        task.recurrence.label,
+        task.assigneeId ?? '-',
+        task.comments.join(','),
+        task.standingCompletionOpId ?? '-',
+      ].join('|'),
+};
 
 bool _sameMap(Map<String, String> a, Map<String, String> b) {
   if (a.length != b.length) return false;

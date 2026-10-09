@@ -20,43 +20,52 @@ void main() {
   late List<String> copied;
   setUp(() {
     copied = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied.add((call.arguments as Map)['text'] as String);
-        }
-        return null;
-      },
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        });
   });
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null);
   });
 
-  Future<Issue> pumpDetail(WidgetTester tester, {required bool withLink}) async {
+  Future<Issue> pumpDetail(
+    WidgetTester tester, {
+    required bool withLink,
+  }) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
 
-    final store = IssueStore(deviceId: 'devA', clock: () => DateTime(2026, 10, 6, 8));
-    final issue = store.add(title: 'トイレットペーパーを買う', dueDate: DateTime(2026, 10, 6));
+    final store = IssueStore(
+      deviceId: 'devA',
+      clock: () => DateTime(2026, 10, 6, 8),
+    );
+    final issue = store.add(
+      title: 'トイレットペーパーを買う',
+      dueDate: DateTime(2026, 10, 6),
+    );
 
-    await tester.pumpWidget(MaterialApp(
-      home: DetailPage(
-        store: store,
-        issueId: issue.id,
-        linkFor: withLink
-            ? (target) async => OneLink(
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DetailPage(
+          store: store,
+          issueId: issue.id,
+          linkFor: withLink
+              ? (target) async => OneLink(
                   baseUrl: 'https://ie-koto.example.workers.dev',
                   householdId: 'hh_e2e0000000000000000000000000000',
                   token: token,
                   issueId: target.id,
                 ).text
-            : null,
+              : null,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     return issue;
   }

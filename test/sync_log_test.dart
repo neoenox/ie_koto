@@ -4,19 +4,20 @@ import 'package:ie_koto/sync/log.dart';
 
 /// 見比べるための要約。両端末でこれが一致すれば収束している。
 Map<String, String> summary(Map<String, Task> tasks) => {
-      for (final task in tasks.values)
-        if (task.isVisible)
-          task.id: [
-            task.title,
-            task.status.name,
-            task.dueDate?.toIso8601String() ?? '-',
-            task.recurrence.label,
-            task.comments.join(','),
-            task.derivedFrom ?? '-',
-          ].join('|'),
-    };
+  for (final task in tasks.values)
+    if (task.isVisible)
+      task.id: [
+        task.title,
+        task.status.name,
+        task.dueDate?.toIso8601String() ?? '-',
+        task.recurrence.label,
+        task.comments.join(','),
+        task.derivedFrom ?? '-',
+      ].join('|'),
+};
 
-List<Task> openTasks(Map<String, Task> tasks) => tasks.values.where((t) => t.isOpen).toList();
+List<Task> openTasks(Map<String, Task> tasks) =>
+    tasks.values.where((t) => t.isOpen).toList();
 
 void main() {
   test('2台がオフラインで別々に完了しても、次の1件は1つだけ', () {
@@ -62,7 +63,11 @@ void main() {
 
     final after = project(mergeOps(a.log, b.log));
     expect(openTasks(after), hasLength(1));
-    expect(summary(after), summary(project(mergeOps(b.log, a.log))), reason: 'どちらの端末でも同じ結果');
+    expect(
+      summary(after),
+      summary(project(mergeOps(b.log, a.log))),
+      reason: 'どちらの端末でも同じ結果',
+    );
   });
 
   test('取り消すと、そこから生まれた次の1件も消える', () {
@@ -86,7 +91,11 @@ void main() {
 
     final tasks = project(a.log);
     expect(tasks['a1']!.status, IssueStatus.open);
-    expect(tasks[nextIssueId('A:2')]!.isVisible, isFalse, reason: '元を失った「次の1件」は見えない');
+    expect(
+      tasks[nextIssueId('A:2')]!.isVisible,
+      isFalse,
+      reason: '元を失った「次の1件」は見えない',
+    );
     expect(openTasks(tasks), hasLength(1));
     expect(openTasks(tasks).single.id, 'a1');
   });
@@ -107,7 +116,11 @@ void main() {
     expect(openTasks(project(a.log)), hasLength(1));
 
     // 完了状態のまま「対応待ち」に戻す（画面の「やることにもどす」）
-    a.write(OpKind.status, 'a1', data: <String, Object?>{'status': IssueStatus.waiting});
+    a.write(
+      OpKind.status,
+      'a1',
+      data: <String, Object?>{'status': IssueStatus.waiting},
+    );
 
     final tasks = project(a.log);
     expect(tasks['a1']!.status, IssueStatus.waiting);
@@ -120,7 +133,10 @@ void main() {
     a.write(
       OpKind.add,
       'a1',
-      data: <String, Object?>{'title': 'お風呂そうじ', 'recurrence': Recurrence.daily},
+      data: <String, Object?>{
+        'title': 'お風呂そうじ',
+        'recurrence': Recurrence.daily,
+      },
     );
     final completion = a.write(OpKind.complete, 'a1');
     writeMissingFollowUps(project(a.log), a);
@@ -128,7 +144,11 @@ void main() {
     final nextId = nextIssueId(completion.id);
     a.write(OpKind.delete, nextId);
 
-    expect(writeMissingFollowUps(project(a.log), a), isEmpty, reason: '消したものを勝手に戻さない');
+    expect(
+      writeMissingFollowUps(project(a.log), a),
+      isEmpty,
+      reason: '消したものを勝手に戻さない',
+    );
     expect(project(a.log)[nextId]!.isVisible, isFalse);
   });
 
@@ -195,7 +215,10 @@ void main() {
     a.write(
       OpKind.add,
       'a1',
-      data: <String, Object?>{'title': 'お風呂そうじ', 'recurrence': Recurrence.daily},
+      data: <String, Object?>{
+        'title': 'お風呂そうじ',
+        'recurrence': Recurrence.daily,
+      },
     );
     b.receive(a.takeOutbox());
 
@@ -218,8 +241,10 @@ void main() {
   });
 
   test('別々に追加したものは、両方とも残る', () {
-    final a = Device('A')..write(OpKind.add, 'a1', data: <String, Object?>{'title': 'Aのぶん'});
-    final b = Device('B')..write(OpKind.add, 'b1', data: <String, Object?>{'title': 'Bのぶん'});
+    final a = Device('A')
+      ..write(OpKind.add, 'a1', data: <String, Object?>{'title': 'Aのぶん'});
+    final b = Device('B')
+      ..write(OpKind.add, 'b1', data: <String, Object?>{'title': 'Bのぶん'});
 
     final tasks = project(mergeOps(a.log, b.log));
     final open = openTasks(tasks);
@@ -229,11 +254,26 @@ void main() {
 
   test('同時についたコメントは両方残り、並びも同じになる', () {
     final a = Device('A');
-    a.write(OpKind.add, 'x', data: <String, Object?>{'title': '電球'}, at: DateTime(2026, 10, 6, 8));
+    a.write(
+      OpKind.add,
+      'x',
+      data: <String, Object?>{'title': '電球'},
+      at: DateTime(2026, 10, 6, 8),
+    );
     final b = Device('B')..receive(a.takeOutbox());
 
-    a.write(OpKind.comment, 'x', data: <String, Object?>{'text': 'Aから'}, at: DateTime(2026, 10, 6, 9));
-    b.write(OpKind.comment, 'x', data: <String, Object?>{'text': 'Bから'}, at: DateTime(2026, 10, 6, 9));
+    a.write(
+      OpKind.comment,
+      'x',
+      data: <String, Object?>{'text': 'Aから'},
+      at: DateTime(2026, 10, 6, 9),
+    );
+    b.write(
+      OpKind.comment,
+      'x',
+      data: <String, Object?>{'text': 'Bから'},
+      at: DateTime(2026, 10, 6, 9),
+    );
 
     final tasks = project(mergeOps(a.log, b.log));
     expect(tasks['x']!.comments, ['Aから', 'Bから']);
@@ -242,11 +282,21 @@ void main() {
 
   test('端末の時計がずれていても、順序は論理時計で決まる', () {
     final a = Device('A');
-    a.write(OpKind.add, 'x', data: <String, Object?>{'title': 'もとの名前'}, at: DateTime(2026, 10, 6, 10));
+    a.write(
+      OpKind.add,
+      'x',
+      data: <String, Object?>{'title': 'もとの名前'},
+      at: DateTime(2026, 10, 6, 10),
+    );
 
     final b = Device('B')..receive(a.takeOutbox());
     // Bの時計は1時間遅れている。それでもBの変更が後になる。
-    b.write(OpKind.rename, 'x', data: <String, Object?>{'title': 'Bが直した'}, at: DateTime(2026, 10, 6, 9));
+    b.write(
+      OpKind.rename,
+      'x',
+      data: <String, Object?>{'title': 'Bが直した'},
+      at: DateTime(2026, 10, 6, 9),
+    );
 
     final tasks = project(mergeOps(a.log, b.log));
     expect(tasks['x']!.title, 'Bが直した');
@@ -268,11 +318,24 @@ void main() {
 
   test('同じop集合なら、並べる順が違っても同じ結果になる', () {
     final a = Device('A');
-    a.write(OpKind.add, 'a1', data: <String, Object?>{'title': 'Aのぶん'}, at: DateTime(2026, 10, 6, 8));
+    a.write(
+      OpKind.add,
+      'a1',
+      data: <String, Object?>{'title': 'Aのぶん'},
+      at: DateTime(2026, 10, 6, 8),
+    );
     final b = Device('B')..receive(a.takeOutbox());
-    b.write(OpKind.add, 'b1', data: <String, Object?>{'title': 'Bのぶん'}, at: DateTime(2026, 10, 6, 9));
+    b.write(
+      OpKind.add,
+      'b1',
+      data: <String, Object?>{'title': 'Bのぶん'},
+      at: DateTime(2026, 10, 6, 9),
+    );
     a.receive(b.takeOutbox());
 
-    expect(summary(project(mergeOps(a.log, b.log))), summary(project(mergeOps(b.log, a.log))));
+    expect(
+      summary(project(mergeOps(a.log, b.log))),
+      summary(project(mergeOps(b.log, a.log))),
+    );
   });
 }

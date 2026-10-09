@@ -29,6 +29,104 @@ void main() {
 
   DeviceStorage reopen() => DeviceStorage(device);
 
+  test('保存された範囲外の時計を除外して開き直せる', () {
+    Op saved(int clock, String title) => Op(
+      deviceId: 'A',
+      lamport: clock,
+      kind: OpKind.add,
+      issueId: 'A:$clock',
+      at: DateTime(2026, 10, 6),
+      data: {'title': title},
+    );
+    final raw = [
+      saved(1, '残す依頼'),
+      saved(9007199254740992, '不正な時計'),
+    ].map((op) => jsonEncode(encodeOp(op))).join('\n');
+    device.write(DeviceStorage.chunkKey(0), raw);
+    device.write(DeviceStorage.chunksKey, '1');
+    device.write(DeviceStorage.deviceKey, 'A');
+    expect(reopen().load().skippedOps, 1);
+    final restored = IssueStore(clock: _clock, storage: reopen());
+    expect(restored.all.single.title, '残す依頼');
+    expect(
+      device.values[DeviceStorage.chunkKey(0)],
+      raw,
+      reason: '読込みだけで保存内容を削除しない',
+    );
+    expect(restored.add(title: '次の依頼').id, 'A:2');
+    expect(restored.add(title: 'さらに追加').id, 'A:3');
+    final again = IssueStore(clock: _clock, storage: reopen());
+    expect(again.all, hasLength(3));
+    expect(again.add(title: '再復元後').id, 'A:4');
+  });
+
+  test('保存した最大時計を復元しても拒否は保存・通知・送信を変えない', () {
+    final store = IssueStore(deviceId: 'A', clock: _clock, storage: storage);
+    store.receive([
+      Op(
+        deviceId: 'remote',
+        lamport: 2147483647,
+        kind: OpKind.add,
+        issueId: 'remote:2147483647',
+        at: _clock(),
+        data: {'title': '上限でも残す依頼'},
+      ),
+    ]);
+    final reopened = IssueStore(clock: _clock, storage: reopen());
+    final saved = Map<String, String>.of(device.values);
+    var notifications = 0;
+    var sends = 0;
+    reopened.addListener(() => notifications++);
+    reopened.onLocalWrite = () => sends++;
+    expect(
+      () => reopened.comment('remote:2147483647', '拒否する入力'),
+      throwsA(isA<ClockExhaustedException>()),
+    );
+    expect(device.values, saved);
+    expect(notifications, 0);
+    expect(sends, 0);
+    final again = IssueStore(clock: _clock, storage: reopen());
+    expect(again.all.single.title, '上限でも残す依頼');
+    expect(again.ops.single.lamport, 2147483647);
+  });
+
+  test('途中拒否は保存せず最後の正常枠を再利用して復元できる', () {
+    final store = IssueStore(deviceId: 'A', clock: _clock, storage: storage);
+    store.receive([
+      Op(
+        deviceId: 'remote',
+        lamport: 2147483646,
+        kind: OpKind.add,
+        issueId: 'remote:2147483646',
+        at: _clock(),
+        data: {'title': '残す依頼'},
+      ),
+    ]);
+    final saved = Map<String, String>.of(device.values);
+    var notifications = 0;
+    var sends = 0;
+    store.addListener(() => notifications++);
+    store.onLocalWrite = () => sends++;
+    expect(
+      () => store.add(title: '部分保存しない', status: IssueStatus.doing),
+      throwsA(isA<ClockExhaustedException>()),
+    );
+    expect(device.values, saved);
+    expect(notifications, 0);
+    expect(sends, 0);
+    final issue = store.add(title: '最後の正常枠');
+    expect(issue.id, 'A:2147483647');
+    expect(notifications, 1);
+    expect(sends, 1);
+    final restored = IssueStore(clock: _clock, storage: reopen());
+    expect(
+      restored.all.map((issue) => issue.title),
+      containsAll(['残す依頼', '最後の正常枠']),
+    );
+    expect(restored.all, hasLength(2));
+    expect(restored.ops.last.lamport, 2147483647);
+  });
+
   test('書いたものは、閉じても残る（画面も同じに見える）', () {
     final store = IssueStore(deviceId: 'A', clock: _clock, storage: storage);
     final bath = store.add(
@@ -52,7 +150,11 @@ void main() {
     expect(storage.load().deviceId, 'A');
 
     // 次に別のidを渡しても、端末に残っている方が使われる（opのidが変わらないように）。
-    final reopened = IssueStore(deviceId: 'B', clock: _clock, storage: reopen());
+    final reopened = IssueStore(
+      deviceId: 'B',
+      clock: _clock,
+      storage: reopen(),
+    );
     expect(reopened.deviceId, 'A');
   });
 
@@ -79,11 +181,20 @@ void main() {
     store.markSent(store.outbox); // 2件とも送れた
     store.add(title: '廊下の電球を交換する');
     store.receive(<Op>[
-      Op(deviceId: 'B', lamport: 1, kind: OpKind.add, issueId: 'B:1', at: DateTime(2026, 10, 6, 9), data: <String, Object?>{'title': '相手が足したもの'}),
+      Op(
+        deviceId: 'B',
+        lamport: 1,
+        kind: OpKind.add,
+        issueId: 'B:1',
+        at: DateTime(2026, 10, 6, 9),
+        data: <String, Object?>{'title': '相手が足したもの'},
+      ),
     ]);
 
     final reopened = IssueStore(clock: _clock, storage: reopen());
-    expect(reopened.outbox.map((op) => op.id), <String>['A:3'], reason: '確認済みと、相手のopは送らない');
+    expect(reopened.outbox.map((op) => op.id), <String>[
+      'A:3',
+    ], reason: '確認済みと、相手のopは送らない');
     expect(reopened.all.map((issue) => issue.title), contains('相手が足したもの'));
   });
 
@@ -99,7 +210,14 @@ void main() {
   });
 
   test('壊れた行があっても、読めるものだけ戻る', () {
-    final kept = Op(deviceId: 'A', lamport: 1, kind: OpKind.add, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'title': '残るもの'});
+    final kept = Op(
+      deviceId: 'A',
+      lamport: 1,
+      kind: OpKind.add,
+      issueId: 'A:1',
+      at: DateTime(2026, 10, 6),
+      data: <String, Object?>{'title': '残るもの'},
+    );
     final unknown = <String, Object?>{
       'id': 'A:2',
       'deviceId': 'A',
@@ -109,7 +227,14 @@ void main() {
       'at': '2026-10-06T08:00:00.000',
       'data': <String, Object?>{},
     };
-    device.write(DeviceStorage.chunkKey(0), <String>[jsonEncode(encodeOp(kept)), '{こわれている', jsonEncode(unknown)].join('\n'));
+    device.write(
+      DeviceStorage.chunkKey(0),
+      <String>[
+        jsonEncode(encodeOp(kept)),
+        '{こわれている',
+        jsonEncode(unknown),
+      ].join('\n'),
+    );
     device.write(DeviceStorage.chunksKey, '1');
     device.write(DeviceStorage.deviceKey, 'A');
 
@@ -147,7 +272,12 @@ void main() {
 
       // 端末に残ったものは、渡さなければそのまま使われる。
       DeviceStorage(device).saveSync(given.withCursor(42));
-      final remembered = SyncConfig.resolve(storage, baseUrl: '', household: '', token: '')!;
+      final remembered = SyncConfig.resolve(
+        storage,
+        baseUrl: '',
+        household: '',
+        token: '',
+      )!;
       expect(remembered.householdId, given.householdId);
       expect(remembered.token, given.token);
       expect(remembered.cursor, 42, reason: '次は差分だけをもらえる');
@@ -157,9 +287,21 @@ void main() {
       const url = 'http://127.0.0.1:8799';
       const home = 'hh_wagaya00000000000000000000000000';
       const token = 'token-token-token-token-token-token-token-token';
-      DeviceStorage(device).saveSync(const SyncCredentials(baseUrl: url, householdId: home, token: token, cursor: 42));
+      DeviceStorage(device).saveSync(
+        const SyncCredentials(
+          baseUrl: url,
+          householdId: home,
+          token: token,
+          cursor: 42,
+        ),
+      );
 
-      final same = SyncConfig.resolve(storage, baseUrl: url, household: home, token: token)!;
+      final same = SyncConfig.resolve(
+        storage,
+        baseUrl: url,
+        household: home,
+        token: token,
+      )!;
       expect(same.cursor, 42);
 
       final other = SyncConfig.resolve(
@@ -178,7 +320,11 @@ void main() {
     addTearDown(server.stop);
 
     final store = IssueStore(deviceId: 'A', clock: _clock, storage: storage);
-    final session = SyncSession(store: store, api: _api(server), storage: storage);
+    final session = SyncSession(
+      store: store,
+      api: _api(server),
+      storage: storage,
+    );
     store.add(title: '牛乳を買う');
     final first = await session.syncNow();
     expect(first.sent, 1);
@@ -237,9 +383,11 @@ void main() {
     final bytes = <String, String>{...device.values}.entries
         .where((entry) => entry.key.startsWith(DeviceStorage.opsPrefix))
         .fold<int>(0, (sum, entry) => sum + entry.value.length);
-    debugPrint('5000op(${bytes ~/ 1024}KB / ${device.values[DeviceStorage.chunksKey]}まとまり): '
-        '射影${watchProject.elapsedMilliseconds}ms / 初回の保存${watchWrite.elapsedMilliseconds}ms / '
-        '読み込み${watchOpen.elapsedMilliseconds}ms / 1件追加${watchAdd.elapsedMilliseconds}ms');
+    debugPrint(
+      '5000op(${bytes ~/ 1024}KB / ${device.values[DeviceStorage.chunksKey]}まとまり): '
+      '射影${watchProject.elapsedMilliseconds}ms / 初回の保存${watchWrite.elapsedMilliseconds}ms / '
+      '読み込み${watchOpen.elapsedMilliseconds}ms / 1件追加${watchAdd.elapsedMilliseconds}ms',
+    );
 
     // 環境で変わるので、桁だけ見る（実測値は docs/VERIFICATION.md）。
     expect(watchAdd.elapsedMilliseconds, lessThan(1000));
@@ -250,27 +398,31 @@ void main() {
 DateTime _clock() => DateTime(2026, 10, 6, 8);
 
 SyncApi _api(OpsServer server) => SyncApi(
-      baseUrl: server.baseUrl,
-      householdId: _household,
-      token: server.token,
-    );
+  baseUrl: server.baseUrl,
+  householdId: _household,
+  token: server.token,
+);
 
 const String _household = 'hh_test00000000000000000000000';
 
 /// 画面に出ているものの要約。これが一致すれば、同じに見えている。
 Map<String, String> _view(IssueStore store) => <String, String>{
-      for (final issue in store.all)
-        issue.id: <String>[
-          issue.title,
-          issue.status.name,
-          issue.dueDate?.toIso8601String() ?? '-',
-          issue.recurrence.label,
-          issue.assigneeId ?? '-',
-          issue.events.where((event) => event.kind == EventKind.comment).map((event) => event.text).join(','),
-        ].join('|'),
-    };
+  for (final issue in store.all)
+    issue.id: <String>[
+      issue.title,
+      issue.status.name,
+      issue.dueDate?.toIso8601String() ?? '-',
+      issue.recurrence.label,
+      issue.assigneeId ?? '-',
+      issue.events
+          .where((event) => event.kind == EventKind.comment)
+          .map((event) => event.text)
+          .join(','),
+    ].join('|'),
+};
 
 extension on IssueStore {
   /// 定期案件の連なり（系列）がある数。開き直しても残っているかを見るため。
-  Iterable<String> openedSeries() => all.map((issue) => issue.seriesKey).toSet();
+  Iterable<String> openedSeries() =>
+      all.map((issue) => issue.seriesKey).toSet();
 }

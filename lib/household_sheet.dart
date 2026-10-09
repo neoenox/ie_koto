@@ -83,17 +83,6 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
             Text(
               '家族とつなげる',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -125,7 +114,9 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   }
 
   Widget _tabs() {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         ChoiceChip(
           label: const Text('あたらしくつくる'),
@@ -135,7 +126,6 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             _error = null;
           }),
         ),
-        const SizedBox(width: 8),
         ChoiceChip(
           label: const Text('はいっている家にはいる'),
           selected: _mode == _Mode.join,
@@ -166,8 +156,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             const SizedBox(width: 8),
             Expanded(
               child: TextButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(const HouseholdLeave()),
+                onPressed: () => _confirmLeave(),
                 child: const Text('つながりをやめる'),
               ),
             ),
@@ -187,81 +176,95 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     );
   }
 
-  /// トークン作り直しと世帯消し。どちらもサーバーに届く操作。
+  /// トークン作り直しと世帯消し。どちらもサーバーに届く操作なので折りたたむ。
   Widget _dangerSection() {
     final rotate = widget.onRotateToken;
     final remove = widget.onDeleteHousehold;
     if (rotate == null && remove == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text(
+        '詳しい設定',
+        style: TextStyle(
+          fontSize: 12.5,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
       children: [
-        if (rotate != null)
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _rotatingToken
-                  ? null
-                  : () async {
-                      setState(() => _rotatingToken = true);
-                      String? token;
-                      try {
-                        token = await rotate();
-                      } catch (_) {
-                        token = null;
-                      }
-                      if (!mounted) return;
-                      setState(() {
-                        _rotatingToken = false;
-                        if (token != null) {
-                          final current = _current!;
-                          _current = SyncCredentials(
-                            baseUrl: current.baseUrl,
-                            householdId: current.householdId,
-                            token: token,
-                            cursor: 0,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (rotate != null)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _rotatingToken
+                      ? null
+                      : () async {
+                          setState(() => _rotatingToken = true);
+                          String? token;
+                          try {
+                            token = await rotate();
+                          } catch (_) {
+                            token = null;
+                          }
+                          if (!mounted) return;
+                          setState(() {
+                            _rotatingToken = false;
+                            if (token != null) {
+                              final current = _current!;
+                              _current = SyncCredentials(
+                                baseUrl: current.baseUrl,
+                                householdId: current.householdId,
+                                token: token,
+                                cursor: 0,
+                              );
+                              _token.text = token;
+                            }
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                token == null
+                                    ? '作り直せませんでした。つながりを確認してください'
+                                    : 'トークンを作り直しました。招待文を送り直してください',
+                              ),
+                            ),
                           );
-                          _token.text = token;
-                        }
-                      });
+                        },
+                  child: Text(_rotatingToken ? '作り直しています…' : 'トークンを作り直す'),
+                ),
+              ),
+            if (remove != null)
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () async {
+                    final ok = await _confirmDelete();
+                    if (!ok) return;
+                    final deleted = await remove();
+                    if (!mounted) return;
+                    if (deleted) {
+                      Navigator.of(context).pop(const HouseholdLeave());
+                    } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            token == null
-                                ? '作り直せませんでした。つながりを確認してください'
-                                : 'トークンを作り直しました。招待文を送り直してください',
-                          ),
+                        const SnackBar(
+                          content: Text('削除できませんでした。つながりを確認してください'),
                         ),
                       );
-                    },
-              child: Text(_rotatingToken ? '作り直しています…' : 'トークンを作り直す'),
+                    }
+                  },
+                  child: const Text('世帯を削除'),
+                ),
+              ),
+            Text(
+              'トークンを作り直すと古い招待文は使えなくなります。世帯を削除しても端末の記録は残ります',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        if (remove != null)
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              onPressed: () async {
-                final ok = await _confirmDelete();
-                if (!ok) return;
-                final deleted = await remove();
-                if (!mounted) return;
-                if (deleted) {
-                  Navigator.of(context).pop(const HouseholdLeave());
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('削除できませんでした。つながりを確認してください')),
-                  );
-                }
-              },
-              child: const Text('世帯を削除'),
-            ),
-          ),
-        Text(
-          'トークンを作り直すと古い招待文は使えなくなります。世帯を削除しても端末の記録は残ります',
-          style: TextStyle(
-            fontSize: 11.5,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          ],
         ),
       ],
     );
@@ -286,6 +289,29 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
       ),
     );
     return ok == true;
+  }
+
+  /// つながりをやめると同期が止まり、戻るには3つの入れ直しが要る。1回だけ確かめる。
+  Future<void> _confirmLeave() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('つながりをやめますか？', style: TextStyle(fontSize: 16)),
+        content: const Text('家族との同期が止まります。端末の記録は残ります。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('つづける'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('やめる'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    Navigator.of(context).pop(const HouseholdLeave());
   }
 
   Widget _line(String label, String value) {
@@ -316,17 +342,20 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     );
   }
 
+  /// 欄の見出しは上に置く（枠に重ねるフローティング表示は使わない）。
+  Widget _caption(String text) => _SheetCaption(text: text);
+
   Widget _form() {
     final creating = _mode == _Mode.create;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!creating || _current != null) const SizedBox(height: 8),
+        _caption('場所（APIのURL）'),
         TextField(
           controller: _base,
           keyboardType: TextInputType.url,
           decoration: const InputDecoration(
-            labelText: '場所（APIのURL）',
             hintText: 'https://…',
             isDense: true,
             border: OutlineInputBorder(),
@@ -334,19 +363,19 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         ),
         if (!creating) ...[
           const SizedBox(height: 10),
+          _caption('世帯id'),
           TextField(
             controller: _household,
             decoration: const InputDecoration(
-              labelText: '世帯id',
               isDense: true,
               border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 10),
+          _caption('トークン'),
           TextField(
             controller: _token,
             decoration: const InputDecoration(
-              labelText: 'トークン',
               isDense: true,
               border: OutlineInputBorder(),
             ),
@@ -479,35 +508,11 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   }
 
   Widget _nameRow(IssueStore store, String id, String name) {
-    final controller = TextEditingController(text: name);
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              maxLength: 80,
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (value) {
-                store.renameMember(id, value);
-                setState(() {});
-              },
-            ),
-          ),
-          const SizedBox(width: 6),
-          TextButton(
-            onPressed: () {
-              store.renameMember(id, controller.text);
-              setState(() {});
-            },
-            child: const Text('名前を変更'),
-          ),
-        ],
-      ),
+    return _MemberNameField(
+      key: ValueKey(id),
+      name: name,
+      label: '$nameの表示名',
+      onSave: (value) => store.renameMember(id, value),
     );
   }
 
@@ -521,7 +526,11 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           controller: controller,
           autofocus: true,
           maxLength: 80,
-          decoration: const InputDecoration(labelText: '名前', hintText: '例：あき'),
+          decoration: const InputDecoration(
+            labelText: '名前',
+            hintText: '例：あき',
+            counterText: '',
+          ),
           onSubmitted: (value) => Navigator.of(context).pop(value),
         ),
         actions: [
@@ -531,7 +540,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('追加'),
+            child: const Text('この名前で入れる'),
           ),
         ],
       ),
@@ -578,6 +587,14 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             ),
           ],
         ),
+        const SizedBox(height: 6),
+        Text(
+          '端末への保存が失敗し続けるときは、ここから記録を書き出して保管してください。',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
@@ -603,7 +620,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('読む'),
+            child: const Text('読み込む'),
           ),
         ],
       ),
@@ -626,6 +643,102 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
       );
     }
   }
+}
+
+/// メンバーごとに入力を保持し、別の入力欄へ移ったときにも保存する。
+class _MemberNameField extends StatefulWidget {
+  const _MemberNameField({
+    super.key,
+    required this.name,
+    required this.label,
+    required this.onSave,
+  });
+
+  final String name;
+  final String label;
+  final ValueChanged<String> onSave;
+
+  @override
+  State<_MemberNameField> createState() => _MemberNameFieldState();
+}
+
+class _MemberNameFieldState extends State<_MemberNameField> {
+  late final _controller = TextEditingController(text: widget.name);
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_onFocusChanged);
+  }
+
+  void _onFocusChanged() {
+    if (!_focus.hasFocus) _save();
+  }
+
+  void _save() {
+    widget.onSave(_controller.text);
+    // 空白だけの名前は保存できないので、表示も保存済みの名前に戻す。
+    if (_controller.text.trim().isEmpty) _controller.text = widget.name;
+  }
+
+  @override
+  void didUpdateWidget(covariant _MemberNameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_focus.hasFocus && oldWidget.name != widget.name) {
+      _controller.text = widget.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocusChanged);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SheetCaption(text: widget.label),
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          maxLength: 80,
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+            counterText: '',
+          ),
+          onSubmitted: (_) => _save(),
+          onTapOutside: (_) => _focus.unfocus(),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 状態を持たない見出し。枠に重ねるフローティング表示は使わない。
+class _SheetCaption extends StatelessWidget {
+  const _SheetCaption({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 12.5,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
 }
 
 /// シートで決めた値。保存と再接続は呼ばない（呼ぶ側がやる）。
@@ -656,7 +769,7 @@ Future<Object?> showHouseholdSheet(
 }) {
   return showModalBottomSheet<Object?>(
     context: context,
-    showDragHandle: false,
+    showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => HouseholdSheet(
       current: current,

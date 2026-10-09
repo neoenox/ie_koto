@@ -20,17 +20,25 @@ class WorkerServer {
   static Future<WorkerServer?> start({String database = ':memory:'}) async {
     if (!await _nodeAvailable()) return null;
 
-    final process = await Process.start(
-      'node',
-      <String>['--experimental-sqlite', 'test/serve.mjs', '--port', '0', '--db', database],
-      workingDirectory: 'server',
-    );
+    final process = await Process.start('node', <String>[
+      '--experimental-sqlite',
+      'test/serve.mjs',
+      '--port',
+      '0',
+      '--db',
+      database,
+    ], workingDirectory: 'server');
 
     final ready = Completer<int>();
-    process.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-      final match = RegExp(r'^PORT=(\d+)$').firstMatch(line.trim());
-      if (match != null && !ready.isCompleted) ready.complete(int.parse(match.group(1)!));
-    });
+    process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+          final match = RegExp(r'^PORT=(\d+)$').firstMatch(line.trim());
+          if (match != null && !ready.isCompleted) {
+            ready.complete(int.parse(match.group(1)!));
+          }
+        });
     // 読み捨てないと、パイプが詰まって止まることがある。
     process.stderr.listen((_) {});
 

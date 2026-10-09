@@ -8,13 +8,16 @@ import 'package:ie_koto/one_link.dart';
 void main() {
   const token = 'h8Qw3ZrT9xYb2LmN4PvC6SdF7GhJ1KlZ3XcV5BnM7Qa';
 
-  OneLink build({String baseUrl = 'https://ie-koto.example.workers.dev', String? api}) => OneLink(
-        baseUrl: baseUrl,
-        apiUrl: api,
-        householdId: 'hh_e2e0000000000000000000000000000',
-        token: token,
-        issueId: 'devA:1',
-      );
+  OneLink build({
+    String baseUrl = 'https://ie-koto.example.workers.dev',
+    String? api,
+  }) => OneLink(
+    baseUrl: baseUrl,
+    apiUrl: api,
+    householdId: 'hh_e2e0000000000000000000000000000',
+    token: token,
+    issueId: 'devA:1',
+  );
 
   test('送ったリンクを開くと、同じものが読める（往復）', () {
     final link = build();
@@ -37,7 +40,10 @@ void main() {
     expect(opened.query, isEmpty, reason: '問い合わせ部分は必ずサーバーに送られる');
     expect(opened.queryParameters, isEmpty);
     // サーバーが受け取るのは、断片を落としたこの部分だけ。
-    expect(opened.removeFragment().toString(), 'https://ie-koto.example.workers.dev');
+    expect(
+      opened.removeFragment().toString(),
+      'https://ie-koto.example.workers.dev',
+    );
     expect(opened.removeFragment().toString(), isNot(contains(token)));
   });
 
@@ -49,8 +55,13 @@ void main() {
     expect(OneLink.fromUri(dev)!.baseUrl, api);
 
     // 本番は同じドメインなので、書かなくてよい。開いたページの場所をそのまま使う。
-    final live = Uri.parse(build(baseUrl: 'https://ie-koto.example.workers.dev').text);
-    expect(OneLink.fromUri(live)!.baseUrl, 'https://ie-koto.example.workers.dev');
+    final live = Uri.parse(
+      build(baseUrl: 'https://ie-koto.example.workers.dev').text,
+    );
+    expect(
+      OneLink.fromUri(live)!.baseUrl,
+      'https://ie-koto.example.workers.dev',
+    );
     expect(live.fragment, isNot(contains('api=')));
   });
 
@@ -58,22 +69,43 @@ void main() {
     expect(OneLink.fromUri(Uri.parse('http://127.0.0.1:8791/')), isNull);
     expect(OneLink.fromUri(Uri.parse('http://127.0.0.1:8791/#/today')), isNull);
     expect(
-      OneLink.fromUri(Uri.parse('file:///C:/ie_koto/index.html#one?i=devA:1&h=hh_e2e0000000000000000000000000000&t=$token')),
+      OneLink.fromUri(
+        Uri.parse(
+          'file:///C:/ie_koto/index.html#one?i=devA:1&h=hh_e2e0000000000000000000000000000&t=$token',
+        ),
+      ),
       isNull,
       reason: 'http(s)でなければ、開いた場所をAPIとして使えない',
     );
   });
 
   test('欠けたリンクは、途中まで動くのではなく、読まない', () {
-    String link(String params) => 'https://ie-koto.example.workers.dev/#one?$params';
+    String link(String params) =>
+        'https://ie-koto.example.workers.dev/#one?$params';
 
-    final ok = 'i=devA:1&h=hh_e2e0000000000000000000000000000&t=$token&m=partner';
+    final ok =
+        'i=devA:1&h=hh_e2e0000000000000000000000000000&t=$token&m=partner';
 
-    expect(OneLink.fromUri(Uri.parse(link('h=hh_e2e0000000000000000000000000000&t=$token'))), isNull,
-        reason: 'どの1件か分からない');
-    expect(OneLink.fromUri(Uri.parse(link('i=devA:1&t=$token'))), isNull, reason: 'どの世帯か分からない');
     expect(
-      OneLink.fromUri(Uri.parse(link('i=devA:1&h=hh_e2e0000000000000000000000000000&t=h8Qw3ZrT9xYb2LmN4PvC6S'))),
+      OneLink.fromUri(
+        Uri.parse(link('h=hh_e2e0000000000000000000000000000&t=$token')),
+      ),
+      isNull,
+      reason: 'どの1件か分からない',
+    );
+    expect(
+      OneLink.fromUri(Uri.parse(link('i=devA:1&t=$token'))),
+      isNull,
+      reason: 'どの世帯か分からない',
+    );
+    expect(
+      OneLink.fromUri(
+        Uri.parse(
+          link(
+            'i=devA:1&h=hh_e2e0000000000000000000000000000&t=h8Qw3ZrT9xYb2LmN4PvC6S',
+          ),
+        ),
+      ),
       isNull,
       reason: '切れたトークンでは、サーバーが断るだけ（開いても何も出ない）',
     );
