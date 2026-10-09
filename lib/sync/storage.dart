@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,8 +10,8 @@ import 'wire.dart';
 
 /// 端末に残すもの（設計の手順1）。
 ///
-/// 残すのは **opの列・端末id・送信済みの位置・同期の設定** だけ。
-/// 画面に出す形（射影）は残さない。起動時に op から作り直せばよい
+/// opの列・端末id・送信済みの位置・同期の設定と、世帯名簿・旧ID対応・本人設定を残す。
+/// 案件の射影は残さない。起動時に op と旧ID対応から作り直せばよい
 /// （規則が1つで済むし、射影の形を変えても保存を壊さない）。
 class SavedState {
   const SavedState({
@@ -19,6 +22,7 @@ class SavedState {
     this.skippedOps = 0,
     this.meId = '',
     this.memberNames = const <String, String>{},
+    this.memberAliases = const <String, String>{},
     this.pendingMemberNames = const <String, String>{},
     this.pendingRelayIds = const <String>{},
   });
@@ -44,6 +48,7 @@ class SavedState {
 
   /// 最後に受け取ったメンバー名（member_id → 名前）。
   final Map<String, String> memberNames;
+  final Map<String, String> memberAliases;
   final Map<String, String> pendingMemberNames;
 
   final Set<String> pendingRelayIds;
@@ -102,7 +107,11 @@ class SyncCredentials {
 ///
 /// 置き場（端末）に1つのインスタンスを向けて使うこと。
 /// 同じ置き場を2つのインスタンスで見ることは想定していない。
-abstract class Storage {
+abstract class Storage implements Listenable {
+  bool get isSaving;
+  Object? get lastSaveError;
+  Future<void> flush();
+
   /// 残しておいたものを読む。**アプリの起動時に1回だけ**呼ぶのが基本。
   /// （読み直しを避けるため、実装は最後に読んだ結果を覚えている）
   SavedState load();
@@ -125,6 +134,7 @@ abstract class Storage {
 
   /// 表示名の上書き。
   void saveMemberNames(Map<String, String> names);
+  void saveMemberAliases(Map<String, String> aliases);
   void savePendingMemberNames(Map<String, String> names);
 }
 
@@ -136,7 +146,12 @@ abstract class KeyValueStore {
   void write(String key, String? value);
 }
 
-class SharedPrefsStore implements KeyValueStore {
+/// 非同期保存先は、受付と永続化の完了を区別する。
+abstract class AsyncKeyValueStore implements KeyValueStore {
+  Future<void> writeConfirmed(String key, String? value);
+}
+
+class SharedPrefsStore implements AsyncKeyValueStore {
   SharedPrefsStore(this._prefs);
 
   final SharedPreferences _prefs;
@@ -149,11 +164,15 @@ class SharedPrefsStore implements KeyValueStore {
 
   @override
   void write(String key, String? value) {
-    if (value == null) {
-      _prefs.remove(key);
-    } else {
-      _prefs.setString(key, value);
-    }
+    unawaited(writeConfirmed(key, value));
+  }
+
+  @override
+  Future<void> writeConfirmed(String key, String? value) async {
+    final saved = await (value == null
+        ? _prefs.remove(key)
+        : _prefs.setString(key, value));
+    if (!saved) throw StateError('端末に保存できません');
   }
 }
 
@@ -165,7 +184,7 @@ class SharedPrefsStore implements KeyValueStore {
 /// 数百ミリ秒かかる。実測は docs/VERIFICATION.md）。
 ///
 /// まとまりの中は行ごとに読むので、壊れた行があってもその1行だけ捨てられる。
-class DeviceStorage implements Storage {
+class DeviceStorage extends ChangeNotifier implements Storage {
   DeviceStorage(this._store) : _baseStore = _store, namespace = null;
 
   DeviceStorage._(this._baseStore, String namespace)
@@ -187,6 +206,7 @@ class DeviceStorage implements Storage {
         syncKey,
         meKey,
         membersKey,
+        aliasesKey,
         pendingMembersKey,
         for (
           var i = 0;
@@ -218,11 +238,74 @@ class DeviceStorage implements Storage {
   static const String syncKey = 'ie_koto.sync';
   static const String meKey = 'ie_koto.me_id';
   static const String membersKey = 'ie_koto.member_names';
+  static const String aliasesKey = 'ie_koto.member_aliases';
   static const String pendingMembersKey = 'ie_koto.pending_members';
 
   static String chunkKey(int index) => '$opsPrefix.$index';
 
   final KeyValueStore _store;
+  final Map<String, String?> _unconfirmed = {};
+  Future<void>? _flushing;
+  @override
+  bool get isSaving => _flushing != null;
+  @override
+  Object? lastSaveError;
+
+  void _write(String key, String? value) {
+    _unconfirmed[key] = value;
+    final base = _baseStore;
+    if (base is AsyncKeyValueStore) {
+      unawaited(flush());
+    } else {
+      try {
+        _store.write(key, value);
+        _unconfirmed.remove(key);
+        if (_unconfirmed.isEmpty) lastSaveError = null;
+      } catch (error) {
+        lastSaveError = error;
+      }
+      notifyListeners();
+    }
+  }
+
+  /// 未完了・失敗した書き込みを、順序を保って再試行する。
+  @override
+  Future<void> flush() {
+    final running = _flushing;
+    if (running != null) return running;
+    if (_unconfirmed.isEmpty) return Future.value();
+    final future = Future<void>.microtask(() async {
+      try {
+        while (_unconfirmed.isNotEmpty) {
+          final entry = _unconfirmed.entries.first;
+          final base = _baseStore;
+          if (base is AsyncKeyValueStore) {
+            final key = namespace == null
+                ? entry.key
+                : 'ie_koto.household.$namespace.${entry.key}';
+            await base.writeConfirmed(key, entry.value);
+          } else {
+            _store.write(entry.key, entry.value);
+          }
+          if (_unconfirmed[entry.key] == entry.value) {
+            _unconfirmed.remove(entry.key);
+          }
+        }
+        lastSaveError = null;
+      } catch (error) {
+        lastSaveError = error;
+      }
+    });
+    _flushing = future;
+    notifyListeners();
+    unawaited(
+      future.whenComplete(() {
+        _flushing = null;
+        notifyListeners();
+      }),
+    );
+    return future;
+  }
 
   SavedState? _cached;
   String? _cachedFingerprint;
@@ -252,14 +335,14 @@ class DeviceStorage implements Storage {
     var lines = List<String>.of(_tail);
     for (final op in fresh) {
       if (lines.length >= chunkSize) {
-        _store.write(chunkKey(index), lines.join('\n')); // いっぱいになったまとまりは書き切る
+        _write(chunkKey(index), lines.join('\n')); // いっぱいになったまとまりは書き切る
         index += 1;
         lines = <String>[];
       }
       lines.add(jsonEncode(encodeOp(op)));
     }
-    _store.write(chunkKey(index), lines.join('\n'));
-    _store.write(chunksKey, '${index + 1}');
+    _write(chunkKey(index), lines.join('\n'));
+    _write(chunksKey, '${index + 1}');
 
     _chunks = index + 1;
     _tail = lines;
@@ -269,49 +352,56 @@ class DeviceStorage implements Storage {
 
   @override
   void saveDeviceId(String deviceId) {
-    _store.write(deviceKey, deviceId);
+    _write(deviceKey, deviceId);
     _cached = null;
     _cachedFingerprint = null;
   }
 
   @override
   void savePushedThrough(int lamport) {
-    _store.write(pushedKey, '$lamport');
+    _write(pushedKey, '$lamport');
     _cached = null;
     _cachedFingerprint = null;
   }
 
   @override
   void savePendingRelayIds(Set<String> ids) {
-    _store.write(relayKey, jsonEncode(ids.toList()..sort()));
+    _write(relayKey, jsonEncode(ids.toList()..sort()));
     _cached = null;
     _cachedFingerprint = null;
   }
 
   @override
   void saveSync(SyncCredentials credentials) {
-    _store.write(syncKey, jsonEncode(credentials.toJson()));
+    _write(syncKey, jsonEncode(credentials.toJson()));
     _cached = null;
     _cachedFingerprint = null;
   }
 
   @override
   void saveMeId(String meId) {
-    _store.write(meKey, meId);
+    _write(meKey, meId);
     _cached = null;
     _cachedFingerprint = null;
   }
 
   @override
   void saveMemberNames(Map<String, String> names) {
-    _store.write(membersKey, jsonEncode(names));
+    _write(membersKey, jsonEncode(names));
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
+  @override
+  void saveMemberAliases(Map<String, String> aliases) {
+    _write(aliasesKey, jsonEncode(aliases));
     _cached = null;
     _cachedFingerprint = null;
   }
 
   @override
   void savePendingMemberNames(Map<String, String> names) {
-    _store.write(pendingMembersKey, jsonEncode(names));
+    _write(pendingMembersKey, jsonEncode(names));
     _cached = null;
     _cachedFingerprint = null;
   }
@@ -329,6 +419,7 @@ class DeviceStorage implements Storage {
       _store.read(syncKey) ?? '',
       _store.read(meKey) ?? '',
       _store.read(membersKey) ?? '',
+      _store.read(aliasesKey) ?? '',
       _store.read(pendingMembersKey) ?? '',
     ].join('|');
   }
@@ -362,6 +453,7 @@ class DeviceStorage implements Storage {
       skippedOps: decoded.skipped,
       meId: _store.read(meKey) ?? '',
       memberNames: _readMemberNames(),
+      memberAliases: _readStringMap(aliasesKey),
       pendingMemberNames: _readStringMap(pendingMembersKey),
     );
   }

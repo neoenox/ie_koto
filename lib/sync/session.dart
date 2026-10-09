@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../model.dart';
 import '../store.dart';
 import 'api.dart';
@@ -34,9 +36,9 @@ class SyncOutcome {
 /// 送るのは `store.outbox`（自分が書いたop）。もらったら `store.receive` で突き合わせ、
 /// 足りない「次の1件」を書いて、それも送る。
 ///
-/// **リアルタイム購読はしない。** 取りに行くのは、起動時・復帰時・自分が書いた直後の3回だけ
-/// （自分が書いた直後は [autoPushDelay] でまとめる）。
-class SyncSession {
+/// リアルタイム購読ではなく、前面では10秒ごとに差分同期する。
+/// 起動・復帰時は即同期し、自分が書いた直後は [autoPushDelay] でまとめる。
+class SyncSession extends ChangeNotifier {
   SyncSession({
     required this.store,
     required this.api,
@@ -70,6 +72,49 @@ class SyncSession {
   Timer? _timer;
   bool _attached = false;
   bool _directoryReady = false;
+  bool _closed = false;
+  bool _foregroundPaused = false;
+  Timer? _foregroundTimer;
+
+  bool get isSyncing => _inFlight != null;
+  bool get hasPendingChanges =>
+      store.outbox.isNotEmpty || store.pendingMemberNames.isNotEmpty;
+
+  /// 前面だけで10秒ごとに差分同期。失敗しても次の回で再試行する。
+  void startForegroundSync({Future<void> Function()? onSync}) {
+    if (_closed || _foregroundTimer != null) return;
+    _foregroundPaused = false;
+    Future<void> tick() async {
+      if (_closed || _inFlight != null) return;
+      try {
+        if (onSync != null) {
+          await onSync();
+        } else {
+          await syncNow();
+        }
+      } catch (_) {
+        // lastError に残し、次の回を待つ。
+      }
+    }
+
+    _foregroundTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(tick()),
+    );
+    unawaited(tick());
+  }
+
+  void stopForegroundSync() {
+    _foregroundPaused = true;
+    _foregroundTimer?.cancel();
+    _foregroundTimer = null;
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _checkOpen() {
+    if (_closed) throw StateError('同期は終了しています');
+  }
 
   /// ストアの変更を拾って、書いた直後に自動で送る。
   void attach() {
@@ -77,9 +122,12 @@ class SyncSession {
     _attached = true;
     store.onLocalWrite = _schedule;
     store.onMemberWrite = _saveMember;
+    store.addListener(_storeChanged);
   }
 
   void detach() {
+    stopForegroundSync();
+    store.removeListener(_storeChanged);
     _attached = false;
     store.onLocalWrite = null;
     store.onMemberWrite = null;
@@ -89,10 +137,12 @@ class SyncSession {
 
   /// 送るだけ（もらわない）。書いた直後の自動送信と、明示的な送信に使う。
   Future<PushResult> pushNow() async {
+    _checkOpen();
     final batch = store.outbox;
     if (batch.isEmpty) return PushResult.none;
 
     final result = await api.push(batch);
+    _checkOpen();
     // 送れたぶんだけを送信待ちから外す（送っている間に書いたものは残す）。
     store.markSent(batch);
     return result;
@@ -101,24 +151,33 @@ class SyncSession {
   /// 送って、もらって、足りない「次の1件」を書いて、また送る。
   /// すでに走っていれば、その回に乗る（同じ仕事を2回しない）。
   Future<SyncOutcome> syncNow() {
+    if (_closed) return Future.error(StateError('同期は終了しています'));
     final running = _inFlight;
     if (running != null) return running;
 
-    final future = _run();
+    final future = Future<SyncOutcome>.microtask(_run);
     _inFlight = future;
+    notifyListeners();
     // 走り終わったら、次の呼び出しがまた走れるようにする。
     // （この行が作る future は誰も待たないので、失敗はここで受け止めておく。
     //   失敗は lastError に残っていて、次の同期でやり直せる）
     unawaited(
-      future
-          .then((_) {}, onError: (Object _) {})
-          .whenComplete(() => _inFlight = null),
+      future.then((_) {}, onError: (Object _) {}).whenComplete(() {
+        _inFlight = null;
+        if (!_closed) notifyListeners();
+      }),
     );
     return future;
   }
 
   Future<SyncOutcome> _run() async {
     try {
+      _checkOpen();
+      await storage?.flush();
+      _checkOpen();
+      if (storage?.lastSaveError != null) {
+        throw StateError('端末への保存を再試行してください');
+      }
       var sent = 0;
       var duplicates = 0;
 
@@ -126,17 +185,31 @@ class SyncSession {
         var directory = _directoryReady
             ? await api.getMembers()
             : await api.migrateAndGetMembers(store.legacyMemberNames);
+        _checkOpen();
         store.applyMemberAliases(directory.aliases);
         if (store.pendingMemberNames.isNotEmpty) {
           for (final entry in Map<String, String>.of(
             store.pendingMemberNames,
           ).entries) {
             await api.saveMember(Member(entry.key, entry.value));
-            store.markMemberSynced(entry.key);
+            _checkOpen();
+            if (store.pendingMemberNames[entry.key] == entry.value) {
+              store.markMemberSynced(entry.key);
+            }
           }
           directory = await api.getMembers();
         }
-        store.applyMemberDirectory(directory);
+        _checkOpen();
+        // 通信中に改名したものを、古い応答で戻さない。
+        store.applyMemberDirectory(
+          MemberDirectory(
+            members: [
+              for (final m in directory.members)
+                Member(m.id, store.pendingMemberNames[m.id] ?? m.name),
+            ],
+            aliases: directory.aliases,
+          ),
+        );
         _directoryReady = true;
       }
 
@@ -154,6 +227,11 @@ class SyncSession {
       // 世帯とトークンも残しておく（cursorが0のままでも、次からは渡さなくてよい）。
       _savedCursor = -1;
       _saveSync();
+      await storage?.flush();
+      _checkOpen();
+      if (storage?.lastSaveError != null) {
+        throw StateError('端末への保存を再試行してください');
+      }
 
       lastSyncedAt = DateTime.now();
       lastError = null;
@@ -176,10 +254,16 @@ class SyncSession {
 
     for (var page = 0; page < maxPages; page++) {
       final result = await api.pull(since: cursor);
+      _checkOpen();
       // 記録を取り込んで保存してから、そのページの位置を確定する。
       // 次の通信が失敗しても、cursorまでの記録が端末に残る。
       received += store.countNew(result.ops);
       if (result.ops.isNotEmpty) store.receive(result.ops);
+      await storage?.flush();
+      _checkOpen();
+      if (storage?.lastSaveError != null) {
+        throw StateError('受信した記録を端末に保存できません');
+      }
       skipped += result.skipped;
       cursor = result.cursor;
       _saveSync();
@@ -206,12 +290,19 @@ class SyncSession {
 
   /// 同期をやめて、接続を閉じる。
   void close() {
+    if (_closed) return;
+    _closed = true;
     detach();
     api.close();
+    dispose();
+  }
+
+  void _storeChanged() {
+    if (!_closed) notifyListeners();
   }
 
   void _schedule() {
-    if (!_attached) return;
+    if (!_attached || _closed || _foregroundPaused || _inFlight != null) return;
     _timer?.cancel();
     _timer = Timer(autoPushDelay, () => unawaited(_pushSafely()));
   }
@@ -219,7 +310,7 @@ class SyncSession {
   /// 自動送信は投げっぱなしにする。失敗は [lastError] に残して、次の同期でやり直す。
   Future<void> _pushSafely() async {
     try {
-      await pushNow();
+      await syncNow();
     } catch (error) {
       lastError = error;
     }
@@ -227,11 +318,7 @@ class SyncSession {
 
   Future<void> _saveMember(Member member) async {
     try {
-      final running = _inFlight;
-      if (running != null) await running;
-      await api.saveMember(member);
-      store.markMemberSynced(member.id);
-      if (api.issueId == null) await syncNow();
+      _schedule();
     } catch (error) {
       lastError = error;
     }

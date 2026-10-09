@@ -66,11 +66,15 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
     // ビルド時に渡した設定（--dart-define）が最優先。無ければ端末に残しておいたものを使う。
     final credentials = SyncConfig.resolve(widget.storage);
     _activeStorage = _storageFor(credentials?.householdId);
-    _store = widget.store ?? (credentials == null
-        ? IssueStore.demo(storage: _activeStorage)
-        : IssueStore(storage: _activeStorage));
+    _store =
+        widget.store ??
+        (credentials == null
+            ? IssueStore.demo(storage: _activeStorage)
+            : IssueStore(storage: _activeStorage));
     final scopedSaved = _activeStorage?.load().sync;
-    final selected = credentials != null && scopedSaved != null &&
+    final selected =
+        credentials != null &&
+            scopedSaved != null &&
             scopedSaved.baseUrl == credentials.baseUrl &&
             scopedSaved.householdId == credentials.householdId &&
             scopedSaved.token == credentials.token
@@ -85,7 +89,9 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
       // Move the pre-scope log into the household that owned it before upgrading.
       // Unlinked legacy data stays in the solo scope even when build-time config joins a household.
       final previousHousehold = storage.load().sync?.householdId;
-      storage.scoped(previousHousehold?.isNotEmpty == true ? previousHousehold! : 'solo');
+      storage.scoped(
+        previousHousehold?.isNotEmpty == true ? previousHousehold! : 'solo',
+      );
       return storage.scoped(householdId ?? 'solo');
     }
     return storage;
@@ -104,7 +110,7 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
       token: credentials.token,
     );
     // 起動時に1回、送って・もらって・足りない「次の1件」を書く。
-    // このあとは、自分が書いた直後だけ自動で送る（リアルタイム購読はしない）。
+    // 前面では10秒ごとに差分同期。背景では停止し、復帰時に即同期する。
     // cursor も端末から戻すので、2回目以降は差分だけをもらう。
     final session = SyncSession(
       store: _store,
@@ -113,12 +119,17 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
       cursor: credentials.cursor,
     )..attach();
     _session = session;
-    unawaited(_syncOnce(session));
+    if (WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      session.startForegroundSync(onSync: () => _syncOnce(session));
+    }
   }
 
   /// 画面で決めた設定に切り替える。保存して、セッションを作り直して、すぐ同期する。
   void _applyHousehold(HouseholdResult result) {
-    final saved = _storageFor(result.householdId)?.load().sync ?? widget.storage?.load().sync;
+    final saved =
+        _storageFor(result.householdId)?.load().sync ??
+        widget.storage?.load().sync;
     final credentials = HouseholdSetup.buildCredentials(
       baseUrl: result.baseUrl,
       householdId: result.householdId,
@@ -135,12 +146,16 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
 
   /// つながりをやめる。端末の記録は残し、同期の設定だけ消す。
   void _leaveHousehold() {
-    widget.storage?.saveSync(const SyncCredentials(baseUrl: '', householdId: '', token: '', cursor: 0));
+    widget.storage?.saveSync(
+      const SyncCredentials(baseUrl: '', householdId: '', token: '', cursor: 0),
+    );
     // 空の設定は「未接続」と同じ扱いにするため、保存した同期設定を消したものとして扱う。
     // DeviceStorage に削除APIが無いので、空文字で上書きしてから null として再開する。
     setState(() {
       _activeStorage = _storageFor(null);
-      if (widget.store == null) _store = IssueStore.demo(storage: _activeStorage);
+      if (widget.store == null) {
+        _store = IssueStore.demo(storage: _activeStorage);
+      }
       _startSession(null);
     });
   }
@@ -196,9 +211,12 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final session = _session;
+    if (session == null) return;
     if (state == AppLifecycleState.resumed) {
-      final session = _session;
-      if (session != null) unawaited(_syncOnce(session));
+      session.startForegroundSync(onSync: () => _syncOnce(session));
+    } else {
+      session.stopForegroundSync();
     }
   }
 
@@ -221,7 +239,7 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
       // session.lastError に残っている。次の同期でやり直す。
       return;
     }
-    if (!mounted) return;
+    if (!mounted || !identical(session, _session)) return;
     final me = _store.meId;
     for (final issue in _store.all) {
       if (issue.isDone || issue.assigneeId != me) continue;
@@ -233,7 +251,8 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
     }
   }
 
-  final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +270,8 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
               linkFor: _credentials == null ? null : _linkFor,
               credentials: _credentials,
               onOpenHousehold: _openHousehold,
+              session: _session,
+              onSyncRetry: _session == null ? null : () => _syncOnce(_session!),
             )
           : OnePage(link: widget.oneLink!),
     );
@@ -320,20 +341,68 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
     ).text;
   }
 
+  /// アプリ同梱の日本語フォント（かな・記号・JIS X 0208の漢字まで）。
+  /// 端末のフォントや通信に左右されず、日本語の字形で出る。
+  /// 同梱に無い字（JIS外の漢字など）は _jpFontFallback で拾う。
+  static const _appFont = 'NotoSansJP';
+
+  /// 同梱に無い字（JIS外の漢字など）の受け皿。日文フォントを先に並べる。
+  static const _jpFontFallback = <String>[
+    'Hiragino Kaku Gothic ProN',
+    'Hiragino Sans',
+    'Yu Gothic UI',
+    'Yu Gothic',
+    'YuGothic',
+    'BIZ UDPGothic',
+    'Meiryo',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+  ];
+
+  /// テーマの全テキストスタイルに同梱フォントと日本語フォールバックを付ける。
+  /// 画面側の TextStyle はサイズ指定だけなので、親から継承した指定が効く。
+  static TextTheme _withJpFallback(TextTheme base) {
+    TextStyle? f(TextStyle? s) =>
+        s?.copyWith(fontFamily: _appFont, fontFamilyFallback: _jpFontFallback);
+    return TextTheme(
+      displayLarge: f(base.displayLarge),
+      displayMedium: f(base.displayMedium),
+      displaySmall: f(base.displaySmall),
+      headlineLarge: f(base.headlineLarge),
+      headlineMedium: f(base.headlineMedium),
+      headlineSmall: f(base.headlineSmall),
+      titleLarge: f(base.titleLarge),
+      titleMedium: f(base.titleMedium),
+      titleSmall: f(base.titleSmall),
+      bodyLarge: f(base.bodyLarge),
+      bodyMedium: f(base.bodyMedium),
+      bodySmall: f(base.bodySmall),
+      labelLarge: f(base.labelLarge),
+      labelMedium: f(base.labelMedium),
+      labelSmall: f(base.labelSmall),
+    );
+  }
+
   /// 落ち着いた配色。色で意味を持たせず、線と余白で区切る。
   ThemeData _theme() {
     final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF3F6F5F));
-    return ThemeData(
+    final base = ThemeData(
       colorScheme: scheme,
       scaffoldBackgroundColor: const Color(0xFFFBFAF7),
       splashFactory: InkSparkle.splashFactory,
-      appBarTheme: AppBarTheme(
-        backgroundColor: const Color(0xFFFBFAF7),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFFFBFAF7),
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
       ),
-      listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 20)),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 20),
+      ),
       dividerTheme: const DividerThemeData(space: 1, thickness: 0.5),
+    );
+    return base.copyWith(
+      textTheme: _withJpFallback(base.textTheme),
+      primaryTextTheme: _withJpFallback(base.primaryTextTheme),
     );
   }
 }

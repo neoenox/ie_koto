@@ -9,15 +9,28 @@ import 'format.dart';
 import 'model.dart';
 import 'notices.dart';
 import 'store.dart';
+import 'write_guard.dart';
 import 'sync/storage.dart';
+import 'sync/session.dart';
+import 'sync/status_line.dart';
 import 'widgets.dart';
 
 /// ホームに出すのは「今やるもの」と「あとで」の2つだけ。
 /// グラフもカレンダーも達成率も置かない。
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.store, this.linkFor, this.credentials, this.onOpenHousehold});
+  const HomePage({
+    super.key,
+    required this.store,
+    this.linkFor,
+    this.credentials,
+    this.onOpenHousehold,
+    this.session,
+    this.onSyncRetry,
+  });
 
   final IssueStore store;
+  final SyncSession? session;
+  final Future<void> Function()? onSyncRetry;
 
   /// 1件リンクを作る（同期の設定が無ければ null）。詳細の「そのほか」から使う。
   final Future<String?> Function(Issue)? linkFor;
@@ -83,7 +96,7 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() {});
   }
 
-  /// 取り消せる時間が終わったら、完了した行を一覧から消す。
+  /// 取り消せる時間が終わったら、おわった行を一覧から消す。
   void _scheduleSweep() {
     _sweep?.cancel();
     Duration? soonest;
@@ -100,7 +113,11 @@ class _HomePageState extends State<HomePage> {
   void _openDetail(Issue issue) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => DetailPage(store: widget.store, issueId: issue.id, linkFor: widget.linkFor),
+        builder: (_) => DetailPage(
+          store: widget.store,
+          issueId: issue.id,
+          linkFor: widget.linkFor,
+        ),
       ),
     );
   }
@@ -120,21 +137,32 @@ class _HomePageState extends State<HomePage> {
           children: [
             _header(store),
             _noticeLine(store),
+            if (widget.session != null)
+              SyncStatusLine(
+                session: widget.session!,
+                onRetry: widget.onSyncRetry,
+              ),
             Expanded(
               child: empty
-                  ? _empty()
+                  ? Center(child: SingleChildScrollView(child: _empty()))
                   // 件数は少ないので、行を全部作っておく（追加した行へ確実に送れる）。
                   : SingleChildScrollView(
                       controller: _scroll,
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(bottom: 96),
                       child: Column(
                         children: [
                           if (today.isNotEmpty) ...[
-                            _section('今日', today.where((i) => !i.isDone).length),
+                            _section(
+                              '今日',
+                              today.where((i) => !i.isDone).length,
+                            ),
                             ..._rows(today),
                           ],
                           if (later.isNotEmpty) ...[
-                            _section('あとで', later.where((i) => !i.isDone).length),
+                            _section(
+                              'あとで',
+                              later.where((i) => !i.isDone).length,
+                            ),
                             ..._rows(later),
                           ],
                           _doneEntry(),
@@ -142,7 +170,11 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
             ),
-            Composer(store: store, onAdded: _scrollTo),
+            Composer(
+              store: store,
+              onAdded: _scrollTo,
+              compact: MediaQuery.viewInsetsOf(context).bottom > 0,
+            ),
           ],
         ),
       ),
@@ -156,14 +188,17 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
       child: Row(
         children: [
-          const Text('家のこと', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+          const Text(
+            '家のこと',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          ),
           const Spacer(),
           InkWell(
             key: const ValueKey('household-open'),
             onTap: open == null ? null : () => open(context),
             borderRadius: BorderRadius.circular(999),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -179,7 +214,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    connected ? 'つながっている' : store.householdName,
+                    connected ? '家族と共有' : store.householdName,
                     style: TextStyle(
                       fontSize: 12.5,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -206,38 +241,53 @@ class _HomePageState extends State<HomePage> {
           line,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: TextStyle(
+            fontSize: 12.5,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
   }
 
   Widget _doneEntry() => Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton(
-          key: const ValueKey('done-open'),
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => DonePage(store: widget.store, linkFor: widget.linkFor),
-            ),
-          ),
-          child: const Text('おわったものをみる', style: TextStyle(fontSize: 13)),
+    alignment: Alignment.centerLeft,
+    child: TextButton(
+      key: const ValueKey('done-open'),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              DonePage(store: widget.store, linkFor: widget.linkFor),
         ),
-      );
+      ),
+      style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+      child: const Text('おわったものをみる', style: TextStyle(fontSize: 13)),
+    ),
+  );
 
   Widget _section(String label, int count) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
-        child: Row(
-          children: [
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 6),
-            Text(
-              '$count',
-              style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-          ],
+    padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+    child: Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.04,
+          ),
         ),
-      );
+        const SizedBox(width: 6),
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ),
+  );
 
   List<Widget> _rows(List<Issue> group) {
     final store = widget.store;
@@ -245,18 +295,29 @@ class _HomePageState extends State<HomePage> {
     for (var i = 0; i < group.length; i++) {
       final issue = group[i];
       final done = issue.isDone;
-      rows.add(_IssueRow(
-        key: _rowKeys.putIfAbsent(issue.id, GlobalKey.new),
-        issue: issue,
-        meta: _metaWords(issue),
-        overdue: !done && issue.dueDate != null && isOverdue(issue.dueDate!, store.now),
-        done: done,
-        onTap: done ? null : () => _openDetail(issue),
-        onDone: done ? null : () => store.complete(issue.id),
-        onUndo: done ? () => store.undoComplete(issue.id) : null,
-      ));
+      rows.add(
+        _IssueRow(
+          key: _rowKeys.putIfAbsent(issue.id, GlobalKey.new),
+          issue: issue,
+          meta: _metaWords(issue),
+          overdue:
+              !done &&
+              issue.dueDate != null &&
+              isOverdue(issue.dueDate!, store.now),
+          done: done,
+          onTap: done ? null : () => _openDetail(issue),
+          onDone: done
+              ? null
+              : () => guardWrite(context, () => store.complete(issue.id)),
+          onUndo: done
+              ? () => guardWrite(context, () => store.undoComplete(issue.id))
+              : null,
+        ),
+      );
       if (i != group.length - 1) {
-        rows.add(const Padding(padding: EdgeInsets.only(left: 60), child: HairLine()));
+        rows.add(
+          const Padding(padding: EdgeInsets.only(left: 60), child: HairLine()),
+        );
       }
     }
     return rows;
@@ -267,26 +328,37 @@ class _HomePageState extends State<HomePage> {
     final store = widget.store;
     final words = <String>[];
     if (issue.dueDate != null) words.add(dueLabel(issue.dueDate!, store.now));
-    if (issue.assigneeId != null) words.add(store.assigneeWord(issue.assigneeId));
+    if (issue.assigneeId != null) {
+      words.add(store.assigneeWord(issue.assigneeId));
+    }
     if (issue.recurrence.isNone == false) words.add(issue.recurrence.label);
     return words.take(2).toList();
   }
 
   Widget _empty() => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('いまは何もない', style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            _doneEntry(),
-            const SizedBox(height: 6),
-            Text(
-              '気づいたときに 追加 で入れておく',
-              style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.outline),
-            ),
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'いまは何もない',
+          style: TextStyle(
+            fontSize: 15,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
-      );
+        const SizedBox(height: 8),
+        _doneEntry(),
+        const SizedBox(height: 6),
+        Text(
+          '気づいたときに 追加 で入れておく',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _IssueRow extends StatelessWidget {
@@ -323,13 +395,17 @@ class _IssueRow extends StatelessWidget {
               width: 48,
               height: 52,
               child: IconButton(
-                key: ValueKey(done ? 'undo-${issue.title}' : 'done-${issue.title}'),
+                key: ValueKey(
+                  done ? 'undo-${issue.title}' : 'done-${issue.title}',
+                ),
                 onPressed: done ? onUndo : onDone,
-                iconSize: 22,
+                iconSize: 24,
                 tooltip: done ? 'もどす' : 'おわった',
                 icon: Icon(
                   done ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: done ? scheme.primary.withValues(alpha: 0.5) : scheme.outline,
+                  color: done
+                      ? scheme.primary.withValues(alpha: 0.5)
+                      : scheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -359,7 +435,7 @@ class _IssueRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12.5,
+                          fontSize: 12,
                           color: overdue && !done
                               ? scheme.error.withValues(alpha: 0.85)
                               : scheme.onSurfaceVariant.withValues(alpha: dim),
