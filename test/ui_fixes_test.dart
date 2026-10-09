@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:ie_koto/household_sheet.dart';
 import 'package:ie_koto/main.dart';
 import 'package:ie_koto/store.dart';
@@ -275,5 +276,28 @@ void main() {
     await tester.tap(find.text('つづける'));
     await tester.pumpAndSettle();
     expect(find.text('トークンを作り直しますか？'), findsNothing);
+  });
+
+  testWidgets('#90 招待QRと招待リンクが出る', (tester) async {
+    const creds = SyncCredentials(
+      baseUrl: 'http://localhost:9',
+      householdId: 'h',
+      token: 'abcdefghijklmnopqrstuvwxyz0123456789AB',
+    );
+    final store = IssueStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HouseholdSheet(current: creds, store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('家族をよぶ'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('招待リンクをコピー'), findsOneWidget);
+    // QRが描画できること（内容の正しさは join_link_test で検証）。
+    expect(tester.takeException(), isNull);
   });
 }
