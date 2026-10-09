@@ -49,7 +49,11 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   final _base = TextEditingController();
   final _household = TextEditingController();
   final _token = TextEditingController();
+  final _baseFocus = FocusNode();
+  final _householdFocus = FocusNode();
+  final _tokenFocus = FocusNode();
   String? _error;
+  String? _errorField;
   late SyncCredentials? _current = widget.current;
   bool _rotatingToken = false;
 
@@ -66,6 +70,9 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     _base.dispose();
     _household.dispose();
     _token.dispose();
+    _baseFocus.dispose();
+    _householdFocus.dispose();
+    _tokenFocus.dispose();
     super.dispose();
   }
 
@@ -124,6 +131,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           onSelected: (_) => setState(() {
             _mode = _Mode.create;
             _error = null;
+            _errorField = null;
           }),
         ),
         ChoiceChip(
@@ -132,6 +140,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           onSelected: (_) => setState(() {
             _mode = _Mode.join;
             _error = null;
+            _errorField = null;
           }),
         ),
       ],
@@ -345,6 +354,32 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   /// 欄の見出しは上に置く（枠に重ねるフローティング表示は使わない）。
   Widget _caption(String text) => _SheetCaption(text: text);
 
+  String? _errorFor(String field) => _errorField == field ? _error : null;
+
+  void _clearErrorFor(String field) {
+    if (_errorField != field) return;
+    setState(() {
+      _error = null;
+      _errorField = null;
+    });
+  }
+
+  void _showFieldError(String field, String message) {
+    final focus = switch (field) {
+      'base' => _baseFocus,
+      'household' => _householdFocus,
+      'token' => _tokenFocus,
+      _ => _baseFocus,
+    };
+    setState(() {
+      _errorField = field;
+      _error = message;
+    });
+    // Focusing the offending field makes its InputDecoration.errorText
+    // discoverable to screen readers, not just visually red.
+    focus.requestFocus();
+  }
+
   Widget _form() {
     final creating = _mode == _Mode.create;
     return Column(
@@ -353,31 +388,43 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         if (!creating || _current != null) const SizedBox(height: 8),
         _caption('場所（APIのURL）'),
         TextField(
+          key: const ValueKey('household-base-field'),
           controller: _base,
+          focusNode: _baseFocus,
+          onChanged: (_) => _clearErrorFor('base'),
           keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: 'https://…',
+            errorText: _errorFor('base'),
             isDense: true,
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
           ),
         ),
         if (!creating) ...[
           const SizedBox(height: 10),
           _caption('世帯id'),
           TextField(
+            key: const ValueKey('household-id-field'),
             controller: _household,
-            decoration: const InputDecoration(
+            focusNode: _householdFocus,
+            onChanged: (_) => _clearErrorFor('household'),
+            decoration: InputDecoration(
+              errorText: _errorFor('household'),
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 10),
           _caption('トークン'),
           TextField(
+            key: const ValueKey('household-token-field'),
             controller: _token,
-            decoration: const InputDecoration(
+            focusNode: _tokenFocus,
+            onChanged: (_) => _clearErrorFor('token'),
+            decoration: InputDecoration(
+              errorText: _errorFor('token'),
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
           ),
         ] else ...[
@@ -387,16 +434,6 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             style: TextStyle(
               fontSize: 12,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-        if (_error != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _error!,
-            style: TextStyle(
-              fontSize: 12.5,
-              color: Theme.of(context).colorScheme.error,
             ),
           ),
         ],
@@ -416,7 +453,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   void _create() {
     final baseUrl = HouseholdSetup.normalizeBaseUrl(_base.text);
     if (baseUrl == null) {
-      setState(() => _error = '場所は http(s)://… で入れてください');
+      _showFieldError('base', '場所は http(s)://… で入れてください');
       return;
     }
     Navigator.of(context).pop(
@@ -431,17 +468,17 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   void _join() {
     final baseUrl = HouseholdSetup.normalizeBaseUrl(_base.text);
     if (baseUrl == null) {
-      setState(() => _error = '場所は http(s)://… で入れてください');
+      _showFieldError('base', '場所は http(s)://… で入れてください');
       return;
     }
     final hError = HouseholdSetup.validateHouseholdId(_household.text);
     if (hError != null) {
-      setState(() => _error = hError);
+      _showFieldError('household', hError);
       return;
     }
     final tError = HouseholdSetup.validateToken(_token.text);
     if (tError != null) {
-      setState(() => _error = tError);
+      _showFieldError('token', tError);
       return;
     }
     Navigator.of(context).pop(
