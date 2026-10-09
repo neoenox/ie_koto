@@ -308,7 +308,8 @@ function parseOp(raw) {
   if (deviceId.length === 0 || deviceId.length > 64) return null;
   if (issueId.length === 0 || issueId.length > 128) return null;
   if (at.length === 0 || at.length > 40) return null;
-  if (lamport === null || lamport < 1) return null;
+  // Keep wire clocks well below Web's floating-point integer precision limit.
+  if (lamport === null || lamport < 1 || lamport > 2147483647) return null;
   if (!OP_KIND.test(kind)) return null;
   // op_id は端末側と同じ規則（`<端末id>:<論理時計>`）。ここが崩れると重複を畳めない。
   if (id !== `${deviceId}:${lamport}`) return null;

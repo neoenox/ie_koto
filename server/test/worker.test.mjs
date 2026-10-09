@@ -58,6 +58,132 @@ function get(env, { since = 0, limit, issue, token = TOKEN, household = HOME } =
   return call(env, `/ops?${query}`, { headers: { authorization: `Bearer ${token}` } });
 }
 
+test('論理時計は正の32bit整数だけ受け付ける', async () => {
+  for (const clock of [0, -1, 1.5, 2147483648, 2 ** 53]) {
+    const { env, db } = newEnv();
+    try {
+      const reply = await post(env, [op('boundary', clock, 'add', `boundary:${clock}`, { title: '境界' })]);
+      assert.equal(reply.status, 400, `clock=${clock}`);
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops').get().n, 0);
+    } finally {
+      db.close();
+    }
+  }
+  for (const clock of [1, 2147483647]) {
+    const { env, db } = newEnv();
+    try {
+      const reply = await post(env, [op('boundary', clock, 'add', `boundary:${clock}`, { title: '境界' })]);
+      assert.equal(reply.status, 200, `clock=${clock}`);
+      assert.equal(reply.body.accepted, 1);
+    } finally {
+      db.close();
+    }
+  }
+});
+
+test('範囲外の時計が混ざるバッチは部分保存せず、正常opを再送できる', async () => {
+  for (const invalidFirst of [false, true]) {
+    const { env, db } = newEnv();
+    try {
+      const valid = op('A', 1, 'add', 'A:1', { title: '正常な依頼' });
+      const invalid = op('B', 2147483648, 'add', 'B:2147483648', { title: '範囲外' });
+      const reply = await post(env, invalidFirst ? [invalid, valid] : [valid, invalid]);
+      assert.equal(reply.status, 400);
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops').get().n, 0);
+      const retry = await post(env, [valid]);
+      assert.equal(retry.status, 200);
+      assert.equal(retry.body.accepted, 1);
+      assert.equal(retry.body.duplicates, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops').get().n, 1);
+    } finally {
+      db.close();
+    }
+  }
+});
+
+test('1件リンクは時計上限・依頼範囲・世帯管理・期限・別世帯の境界を守る', async () => {
+  const { env, db } = newEnv();
+  try {
+    const issue = 'A:1';
+    const member = 'guest';
+    const shared = await call(env, '/household/share', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ household: HOME, issue, member,
+        expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+    });
+    assert.equal(shared.status, 200);
+    const claim = (clock) => ({ ...op('guest-device', clock, 'assignee', issue,
+      { assigneeId: member }), member });
+    const rejected = await post(env, [claim(2147483648)], { token: shared.body.token });
+    assert.equal(rejected.status, 400);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops').get().n, 0);
+    for (const outside of [
+      { ...claim(1), issueId: 'other-issue' },
+      { ...claim(1), member: 'other-member' },
+      { ...claim(1), data: { assigneeId: 'other-member' } },
+      { ...claim(1), kind: 'comment', data: { text: '権限外の投稿' } },
+    ]) {
+      const denied = await post(env, [outside], { token: shared.body.token });
+      assert.equal(denied.status, 403);
+      assert.equal(denied.body.error, 'share_scope');
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops').get().n, 0);
+    }
+    const accepted = await post(env, [claim(1)], { token: shared.body.token });
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.body.accepted, 1);
+    const seeded = await post(env, [
+      op('A', 1, 'add', issue, { title: '共有する依頼' }),
+      op('A', 2, 'add', 'A:2', { title: '世帯内の別の依頼' }),
+    ]);
+    assert.equal(seeded.status, 200);
+    const token = shared.body.token;
+    assert.equal((await post(env, [op('other', 1, 'add', issue, { title: '別世帯の同じissue ID' })],
+      { household: OTHER_HOME, token: OTHER_TOKEN })).status, 200);
+    assert.equal((await get(env, { household: OTHER_HOME, token, issue })).status, 401);
+    assert.equal((await post(env, [claim(2)], { household: OTHER_HOME, token })).status, 401);
+    const otherOwner = await get(env, { household: OTHER_HOME, token: OTHER_TOKEN });
+    assert.equal(otherOwner.status, 200);
+    assert.equal(otherOwner.body.ops.length, 1);
+    assert.equal(otherOwner.body.ops[0].data.title, '別世帯の同じissue ID');
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+    for (const [path, method, body] of [
+      [`/ops?household=${HOME}`, 'DELETE', null],
+      ['/household/rotate', 'POST', { household: HOME, token: OTHER_TOKEN }],
+      [`/household/members?household=${HOME}`, 'GET', null],
+      ['/household/members', 'POST', { household: HOME,
+        id: 'mem_0123456789abcdef', name: '権限外の名前' }],
+      ['/household/members/migrate', 'POST', { household: HOME,
+        legacyMembers: [{ id: 'me', name: '権限外の移行' }] }],
+      ['/household/share', 'POST', { household: HOME, issue, member,
+        expiresAt: new Date(Date.now() + 60_000).toISOString() }],
+    ]) {
+      const denied = await call(env, path, { method, headers,
+        ...(body === null ? {} : { body: JSON.stringify(body) }) });
+      assert.equal(denied.status, 401, `${method} ${path}`);
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM members').get().n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM member_aliases').get().n, 0);
+    assert.equal((await get(env)).status, 200, '所有者tokenもデータも維持される');
+    assert.equal((await get(env, { token })).status, 401);
+    assert.equal((await get(env, { token, issue: 'A:2' })).status, 401);
+    const scoped = await get(env, { token, issue });
+    assert.equal(scoped.status, 200);
+    assert.equal(scoped.body.ops.length, 2);
+    assert.ok(scoped.body.ops.every((item) => item.issueId === issue));
+    db.prepare('UPDATE share_tokens SET expires_at = ? WHERE household_id = ?')
+      .run('2000-01-01T00:00:00.000Z', HOME);
+    assert.equal((await get(env, { token, issue })).status, 401);
+    assert.equal((await post(env, [claim(2)], { token })).status, 401);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops WHERE household_id = ?').get(HOME).n, 3);
+    const owner = await get(env);
+    assert.equal(owner.status, 200);
+    assert.equal(owner.body.ops.length, 3);
+  } finally {
+    db.close();
+  }
+});
+
 test('預けたopを、挿入順に取り出せる', async () => {
   const { env } = newEnv();
 

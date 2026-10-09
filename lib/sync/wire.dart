@@ -12,20 +12,19 @@ import 'log.dart';
 /// - `data` は種類ごとの項目。日付は ISO 8601、くりかえしは入れ子のオブジェクト、
 ///   状態は enum の名前。知らない項目はそのまま通す（古い端末が新しい項目を落とさない）。
 Map<String, Object?> encodeOp(Op op) => <String, Object?>{
-      'id': op.id,
-      'deviceId': op.deviceId,
-      'lamport': op.lamport,
-      'kind': op.kind.name,
-      'issueId': op.issueId,
-      'at': encodeTime(op.at),
-      'data': encodeData(op.data),
-      'derivedFrom': op.derivedFrom,
-      'member': op.memberId,
-    };
+  'id': op.id,
+  'deviceId': op.deviceId,
+  'lamport': op.lamport,
+  'kind': op.kind.name,
+  'issueId': op.issueId,
+  'at': encodeTime(op.at),
+  'data': encodeData(op.data),
+  'derivedFrom': op.derivedFrom,
+  'member': op.memberId,
+};
 
-List<Map<String, Object?>> encodeOps(Iterable<Op> ops) => <Map<String, Object?>>[
-      for (final op in ops) encodeOp(op),
-    ];
+List<Map<String, Object?>> encodeOps(Iterable<Op> ops) =>
+    <Map<String, Object?>>[for (final op in ops) encodeOp(op)];
 
 /// 受け取ったopの束。読めなかったものは捨てて、数だけ残す。
 /// （1件のせいで同期ぜんぶが止まるより、飛ばして先へ進む方がまし）
@@ -64,7 +63,8 @@ Op? decodeOp(Map<Object?, Object?> raw) {
   final at = decodeTime(raw['at']);
   if (deviceId is! String || deviceId.isEmpty) return null;
   if (issueId is! String || issueId.isEmpty) return null;
-  if (lamport is! int || lamport < 1) return null;
+  // Match the server boundary before a remote/saved clock reaches Device.
+  if (lamport is! int || lamport < 1 || lamport > 2147483647) return null;
   if (at == null) return null;
 
   // op_id は `<端末id>:<論理時計>`。ここが崩れると重複を畳めない。
@@ -92,8 +92,16 @@ Op? decodeOp(Map<Object?, Object?> raw) {
 
   final derivedFrom = raw['derivedFrom'];
   final member = raw['member'];
-  if (derivedFrom != null && (derivedFrom is! String || derivedFrom.isEmpty || derivedFrom.length > 128)) return null;
-  if (member != null && (member is! String || member.isEmpty || member.length > 64)) return null;
+  if (derivedFrom != null &&
+      (derivedFrom is! String ||
+          derivedFrom.isEmpty ||
+          derivedFrom.length > 128)) {
+    return null;
+  }
+  if (member != null &&
+      (member is! String || member.isEmpty || member.length > 64)) {
+    return null;
+  }
   return Op(
     deviceId: deviceId,
     lamport: lamport,
@@ -101,14 +109,20 @@ Op? decodeOp(Map<Object?, Object?> raw) {
     issueId: issueId,
     at: at,
     data: data,
-    derivedFrom: derivedFrom is String && derivedFrom.isNotEmpty ? derivedFrom : null,
+    derivedFrom: derivedFrom is String && derivedFrom.isNotEmpty
+        ? derivedFrom
+        : null,
     memberId: member is String && member.isNotEmpty ? member : null,
   );
 }
 
 bool _validData(OpKind kind, Map data) {
-  bool optionalString(String key) => !data.containsKey(key) || data[key] == null || data[key] is String;
-  bool optionalDate(String key) => !data.containsKey(key) || data[key] == null || decodeTime(data[key]) != null;
+  bool optionalString(String key) =>
+      !data.containsKey(key) || data[key] == null || data[key] is String;
+  bool optionalDate(String key) =>
+      !data.containsKey(key) ||
+      data[key] == null ||
+      decodeTime(data[key]) != null;
   bool recurrence(Object? value) {
     if (value is! Map) return false;
     switch (value['kind']) {
@@ -117,21 +131,34 @@ bool _validData(OpKind kind, Map data) {
         return true;
       case 'weekdays':
         final days = value['weekdays'];
-        return days is List && days.isNotEmpty && days.every((day) => day is int && day >= 1 && day <= 7);
+        return days is List &&
+            days.isNotEmpty &&
+            days.every((day) => day is int && day >= 1 && day <= 7);
       case 'everyDays':
         final days = value['everyDays'];
-        return days is int && days >= 1 && (!value.containsKey('fromCompletion') || value['fromCompletion'] is bool);
+        return days is int &&
+            days >= 1 &&
+            (!value.containsKey('fromCompletion') ||
+                value['fromCompletion'] is bool);
       default:
         return false;
     }
   }
+
   switch (kind) {
     case OpKind.add:
-      return data['title'] is String && (data['title'] as String).trim().isNotEmpty &&
-          optionalString('assigneeId') && optionalDate('dueDate') && optionalString('seriesId') &&
-          optionalString('originIssueId') && (!data.containsKey('recurrence') || data['recurrence'] == null || recurrence(data['recurrence']));
+      return data['title'] is String &&
+          (data['title'] as String).trim().isNotEmpty &&
+          optionalString('assigneeId') &&
+          optionalDate('dueDate') &&
+          optionalString('seriesId') &&
+          optionalString('originIssueId') &&
+          (!data.containsKey('recurrence') ||
+              data['recurrence'] == null ||
+              recurrence(data['recurrence']));
     case OpKind.rename:
-      return data['title'] is String && (data['title'] as String).trim().isNotEmpty;
+      return data['title'] is String &&
+          (data['title'] as String).trim().isNotEmpty;
     case OpKind.assignee:
       return data.containsKey('assigneeId') && optionalString('assigneeId');
     case OpKind.due:
@@ -139,7 +166,8 @@ bool _validData(OpKind kind, Map data) {
     case OpKind.recurrence:
       return recurrence(data['recurrence']);
     case OpKind.comment:
-      return data['text'] is String && (data['text'] as String).trim().isNotEmpty;
+      return data['text'] is String &&
+          (data['text'] as String).trim().isNotEmpty;
     case OpKind.status:
       return _statusOf(data['status']) != null;
     default:
@@ -148,8 +176,8 @@ bool _validData(OpKind kind, Map data) {
 }
 
 Map<String, Object?> encodeData(Map<String, Object?> data) => <String, Object?>{
-      for (final entry in data.entries) entry.key: _jsonValue(entry.value),
-    };
+  for (final entry in data.entries) entry.key: _jsonValue(entry.value),
+};
 
 Map<String, Object?> decodeData(Map<Object?, Object?> raw) {
   final out = <String, Object?>{};
@@ -171,27 +199,30 @@ Map<String, Object?> decodeData(Map<Object?, Object?> raw) {
 
 /// 端末の時計を、そのままの壁時計で書く（`Z` を付けない）。
 String encodeTime(DateTime time) => DateTime(
-      time.year,
-      time.month,
-      time.day,
-      time.hour,
-      time.minute,
-      time.second,
-      time.millisecond,
-      time.microsecond,
-    ).toIso8601String();
+  time.year,
+  time.month,
+  time.day,
+  time.hour,
+  time.minute,
+  time.second,
+  time.millisecond,
+  time.microsecond,
+).toIso8601String();
 
 DateTime? decodeTime(Object? raw) {
   if (raw is! String || raw.isEmpty) return null;
   return DateTime.tryParse(raw)?.toLocal();
 }
 
-Map<String, Object?> encodeRecurrence(Recurrence recurrence) => <String, Object?>{
+Map<String, Object?> encodeRecurrence(Recurrence recurrence) =>
+    <String, Object?>{
       'kind': recurrence.kind.name,
       if (recurrence.kind == RecurrenceKind.weekdays)
         'weekdays': recurrence.weekdays.toList()..sort(),
-      if (recurrence.kind == RecurrenceKind.everyDays) 'everyDays': recurrence.everyDays,
-      if (recurrence.kind == RecurrenceKind.everyDays) 'fromCompletion': recurrence.fromCompletion,
+      if (recurrence.kind == RecurrenceKind.everyDays)
+        'everyDays': recurrence.everyDays,
+      if (recurrence.kind == RecurrenceKind.everyDays)
+        'fromCompletion': recurrence.fromCompletion,
     };
 
 Recurrence decodeRecurrence(Object? raw) {
@@ -204,14 +235,19 @@ Recurrence decodeRecurrence(Object? raw) {
       final listed = raw['weekdays'];
       if (listed is List) {
         for (final day in listed) {
-          if (day is int && day >= DateTime.monday && day <= DateTime.sunday) days.add(day);
+          if (day is int && day >= DateTime.monday && day <= DateTime.sunday) {
+            days.add(day);
+          }
         }
       }
       return days.isEmpty ? Recurrence.none : Recurrence.onWeekdays(days);
     case 'everyDays':
       final days = raw['everyDays'];
       if (days is! int || days < 1) return Recurrence.none;
-      return Recurrence.every(days, fromCompletion: raw['fromCompletion'] != false);
+      return Recurrence.every(
+        days,
+        fromCompletion: raw['fromCompletion'] != false,
+      );
     default:
       return Recurrence.none;
   }
@@ -235,14 +271,14 @@ IssueStatus? _statusOf(Object? raw) {
 
 /// JSONに書ける形に直す。知らない型は文字列にして落とさない。
 Object? _jsonValue(Object? value) => switch (value) {
-      null => null,
-      String() || num() || bool() => value,
-      DateTime() => encodeTime(value),
-      Recurrence() => encodeRecurrence(value),
-      Enum() => value.name,
-      List() => [for (final item in value) _jsonValue(item)],
-      Map() => <String, Object?>{
-          for (final entry in value.entries) '${entry.key}': _jsonValue(entry.value),
-        },
-      _ => value.toString(),
-    };
+  null => null,
+  String() || num() || bool() => value,
+  DateTime() => encodeTime(value),
+  Recurrence() => encodeRecurrence(value),
+  Enum() => value.name,
+  List() => [for (final item in value) _jsonValue(item)],
+  Map() => <String, Object?>{
+    for (final entry in value.entries) '${entry.key}': _jsonValue(entry.value),
+  },
+  _ => value.toString(),
+};
