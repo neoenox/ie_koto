@@ -121,6 +121,7 @@ void main() {
   });
 
   test('接続前の名前変更を移行先のIDへ結び、ほかの端末と共有する', () async {
+    a.setMeId('partner');
     a.renameMember('partner', 'ゆう');
 
     await sessionA.syncNow();

@@ -21,7 +21,9 @@ void main() {
       );
       store.setMeId('partner');
       final third = store.addMember('そら');
+      store.setMeId('mem_a');
       store.renameMember('mem_a', 'あきさん');
+      store.setMeId('partner');
       store.comment(issue.id, 'オフライン');
 
       final reopened = IssueStore(
