@@ -14,15 +14,19 @@ void main() {
     );
     await tester.pumpAndSettle();
     final fields = find.byType(TextField);
+    // 自分の行だけ編集できる。まず自分の名前を変える。
     await tester.enterText(fields.at(1), 'あき');
-    await tester.tap(fields.at(2));
+    await tester.tap(fields.at(0));
     await tester.pumpAndSettle();
-    expect(store.members.first.name, 'あき');
-    await tester.enterText(fields.at(2), 'はる');
-    await tester.tap(find.text('この端末を使う人'));
+    expect(store.memberById('me')!.name, 'あき');
+    // 本人を切り替えて、もう1人の名前を変える。
+    await tester.tap(find.widgetWithText(ChoiceChip, 'パートナー'));
     await tester.pumpAndSettle();
-    expect(store.members.first.name, 'あき');
-    expect(store.members[1].name, 'はる');
+    await tester.enterText(fields.at(1), 'はる');
+    await tester.tap(fields.at(0));
+    await tester.pumpAndSettle();
+    expect(store.memberById('me')!.name, 'あき');
+    expect(store.memberById('partner')!.name, 'はる');
     expect(tester.takeException(), isNull);
   });
 

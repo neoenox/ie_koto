@@ -14,8 +14,11 @@ void main() {
     expect(store.assigneeWord('partner'), '自分');
     expect(store.assigneeWord('me'), 'パートナー');
     expect(store.byId(issue.id)!.events.last.text, '自分が担当になった');
+    // 自分の名前だけ変えられる。自分の表示は常に関係名（自分）のまま。
+    store.setMeId('me');
     store.renameMember('me', '太郎');
-    expect(store.assigneeWord('me'), '太郎');
+    expect(store.memberById('me')!.name, '太郎');
+    expect(store.assigneeWord('me'), '自分');
     expect(store.assigneeWord(null), 'だれでも');
     expect(store.memberLabel('unknown'), isNull);
   });

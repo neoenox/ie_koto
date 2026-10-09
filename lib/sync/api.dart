@@ -157,6 +157,32 @@ class SyncApi {
     );
   }
 
+  /// 重複した人をまとめる。旧IDは対応表に残る。
+  Future<void> mergeMembers(String fromId, String intoId) async {
+    await _send(
+      () => _client.post(
+        Uri.parse('$baseUrl/household/members/merge'),
+        headers: _headers,
+        body: jsonEncode(<String, Object?>{
+          'household': householdId,
+          'from': fromId,
+          'into': intoId,
+        }),
+      ),
+    );
+  }
+
+  /// 使っていない人を名簿から外す。対応表は残る（履歴の見え方を保つ）。
+  Future<void> removeMember(String id) async {
+    await _send(
+      () => _client.post(
+        Uri.parse('$baseUrl/household/members/remove'),
+        headers: _headers,
+        body: jsonEncode(<String, Object?>{'household': householdId, 'id': id}),
+      ),
+    );
+  }
+
   MemberDirectory _decodeMemberDirectory(http.Response response) {
     final body = _jsonObject(response);
     final rawMembers = body['members'];

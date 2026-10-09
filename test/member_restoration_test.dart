@@ -27,11 +27,14 @@ void main() {
     final first = IssueStore(storage: storage);
     final issue = first.add(title: '修理', assigneeId: 'partner');
     first.applyMemberDirectory(directory);
+    first.setMeId('mem_b');
     first.renameMember('mem_b', '春');
     await storage.flush();
     final restored = IssueStore(storage: DeviceStorage(kv).scoped('async'));
     expect(restored.byId(issue.id)!.assigneeId, 'mem_b');
-    expect(restored.memberLabel('partner'), '春');
+    // 装置が mem_b 本人なので鏡表示は「自分」。中身の名前は「春」。
+    expect(restored.memberLabel('partner'), '自分');
+    expect(restored.memberById('mem_b')!.name, '春');
     expect(restored.pendingMemberNames, {'mem_b': '春'});
   });
 
@@ -56,27 +59,30 @@ void main() {
     final kv = MemoryStore();
     final first = IssueStore(storage: DeviceStorage(kv));
     first.applyMemberDirectory(directory);
+    first.setMeId('mem_b');
     first.renameMember('mem_b', '春');
     final added = first.addMember('なつ');
     final issue = first.add(title: '買い物', assigneeId: added.id);
     final restored = IssueStore(storage: DeviceStorage(kv));
-    expect(restored.memberLabel('mem_b'), '春');
+    expect(restored.memberById('mem_b')!.name, '春');
     expect(restored.memberLabel(added.id), 'なつ');
     expect(restored.pendingMemberNames, {'mem_b': '春', added.id: 'なつ'});
     restored.applyMemberDirectory(directory);
-    expect(restored.memberLabel('mem_b'), '春');
+    expect(restored.memberById('mem_b')!.name, '春');
     expect(restored.assigneeWord(restored.byId(issue.id)!.assigneeId), 'なつ');
   });
 
   test('壊れた旧ID対応表は無視し、旧形式の名前と用事は読める', () {
     final kv = MemoryStore();
     final first = IssueStore(storage: DeviceStorage(kv));
+    first.setMeId('partner');
     first.renameMember('partner', 'はる');
-    final issue = first.add(title: '書類', assigneeId: 'partner');
+    first.add(title: '書類', assigneeId: 'partner');
     kv.write(DeviceStorage.aliasesKey, '{broken');
     final restored = IssueStore(storage: DeviceStorage(kv));
     expect(restored.legacyMemberAliases, isEmpty);
-    expect(restored.assigneeWord(restored.byId(issue.id)!.assigneeId), 'はる');
+    // 装置が partner 本人なので鏡表示は「自分」。中身の名前は「はる」。
+    expect(restored.memberById('partner')!.name, 'はる');
   });
 
   test('旧memberNamesだけの保存データも追加メンバーを復元する', () {
@@ -94,7 +100,9 @@ void main() {
     final a = IssueStore(storage: DeviceStorage(kv).scoped('a'));
     a.applyMemberDirectory(directory);
     a.setMeId('mem_c');
+    a.setMeId('mem_a');
     a.renameMember('mem_a', '秋');
+    a.setMeId('mem_c');
     final b = IssueStore(storage: DeviceStorage(kv).scoped('b'));
     expect(b.members.map((m) => m.id), ['me', 'partner']);
     expect(b.legacyMemberAliases, isEmpty);

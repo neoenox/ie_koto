@@ -24,6 +24,8 @@ class SavedState {
     this.memberNames = const <String, String>{},
     this.memberAliases = const <String, String>{},
     this.pendingMemberNames = const <String, String>{},
+    this.pendingMemberAliases = const <String, String>{},
+    this.pendingMemberRemovals = const <String>{},
     this.pendingRelayIds = const <String>{},
   });
 
@@ -50,6 +52,12 @@ class SavedState {
   final Map<String, String> memberNames;
   final Map<String, String> memberAliases;
   final Map<String, String> pendingMemberNames;
+
+  /// まだ家に送っていない統合（旧ID → 残すID）。
+  final Map<String, String> pendingMemberAliases;
+
+  /// まだ家に送っていない削除（ID）。
+  final Set<String> pendingMemberRemovals;
 
   final Set<String> pendingRelayIds;
 }
@@ -136,6 +144,8 @@ abstract class Storage implements Listenable {
   void saveMemberNames(Map<String, String> names);
   void saveMemberAliases(Map<String, String> aliases);
   void savePendingMemberNames(Map<String, String> names);
+  void savePendingMemberAliases(Map<String, String> aliases);
+  void savePendingMemberRemovals(Set<String> ids);
 }
 
 /// 文字列だけを預けられる場所。
@@ -208,6 +218,8 @@ class DeviceStorage extends ChangeNotifier implements Storage {
         membersKey,
         aliasesKey,
         pendingMembersKey,
+        pendingMemberAliasesKey,
+        pendingMemberRemovalsKey,
         for (
           var i = 0;
           i < (int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0);
@@ -240,6 +252,10 @@ class DeviceStorage extends ChangeNotifier implements Storage {
   static const String membersKey = 'ie_koto.member_names';
   static const String aliasesKey = 'ie_koto.member_aliases';
   static const String pendingMembersKey = 'ie_koto.pending_members';
+  static const String pendingMemberAliasesKey =
+      'ie_koto.pending_member_aliases';
+  static const String pendingMemberRemovalsKey =
+      'ie_koto.pending_member_removals';
 
   static String chunkKey(int index) => '$opsPrefix.$index';
 
@@ -406,6 +422,20 @@ class DeviceStorage extends ChangeNotifier implements Storage {
     _cachedFingerprint = null;
   }
 
+  @override
+  void savePendingMemberAliases(Map<String, String> aliases) {
+    _write(pendingMemberAliasesKey, jsonEncode(aliases));
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
+  @override
+  void savePendingMemberRemovals(Set<String> ids) {
+    _write(pendingMemberRemovalsKey, jsonEncode(ids.toList()));
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
   /// 中身が変わったかどうかを、安い読み取りだけで見分けるための目印。
   String _fingerprint() {
     final chunks = _store.read(chunksKey) ?? '';
@@ -421,6 +451,8 @@ class DeviceStorage extends ChangeNotifier implements Storage {
       _store.read(membersKey) ?? '',
       _store.read(aliasesKey) ?? '',
       _store.read(pendingMembersKey) ?? '',
+      _store.read(pendingMemberAliasesKey) ?? '',
+      _store.read(pendingMemberRemovalsKey) ?? '',
     ].join('|');
   }
 
@@ -455,6 +487,8 @@ class DeviceStorage extends ChangeNotifier implements Storage {
       memberNames: _readMemberNames(),
       memberAliases: _readStringMap(aliasesKey),
       pendingMemberNames: _readStringMap(pendingMembersKey),
+      pendingMemberAliases: _readStringMap(pendingMemberAliasesKey),
+      pendingMemberRemovals: _readStringSet(pendingMemberRemovalsKey),
     );
   }
 
@@ -464,8 +498,12 @@ class DeviceStorage extends ChangeNotifier implements Storage {
   ];
 
   Set<String> _readRelayIds() {
+    return _readStringSet(relayKey);
+  }
+
+  Set<String> _readStringSet(String key) {
     try {
-      final raw = jsonDecode(_store.read(relayKey) ?? '[]');
+      final raw = jsonDecode(_store.read(key) ?? '[]');
       if (raw is! List) return <String>{};
       return raw.whereType<String>().where((id) => id.isNotEmpty).toSet();
     } catch (_) {

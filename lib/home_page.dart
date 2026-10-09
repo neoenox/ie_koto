@@ -146,6 +146,7 @@ class _HomePageState extends State<HomePage> {
                 session: widget.session!,
                 onRetry: widget.onSyncRetry,
               ),
+            if (widget.credentials != null) _meWarning(store),
             Expanded(
               child: empty
                   ? Center(child: SingleChildScrollView(child: _empty()))
@@ -259,6 +260,41 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 本人まわりの警告。接続中だけ出す（1人使いは妨げない）。
+  /// 未選択は選び直しを促し、重複は解消（統合・選び直し）を促す。
+  Widget _meWarning(IssueStore store) {
+    final open = widget.onOpenHousehold;
+    final duplicates = store.duplicateMemberLabels;
+    if (store.meExplicit && duplicates.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final message = !store.meExplicit
+        ? 'この端末を使う人をえらんでください'
+        : '「${duplicates.join('・')}」が2台で使われています。本人を確認してください';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+      child: InkWell(
+        onTap: open == null ? null : () => open(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            message,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
+          ),
+        ),
       ),
     );
   }

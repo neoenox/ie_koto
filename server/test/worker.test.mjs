@@ -567,3 +567,55 @@ test('既存のmembers行もIDを維持して対応表に移す', async () => {
   assert.equal(db.prepare('SELECT count(*) AS n FROM members WHERE household_id = ? AND member_id IN (?, ?)')
     .get(HOME, 'me', 'partner').n, 0);
 });
+
+test('重複した人をまとめると旧IDは対応表に残り旧行だけ消える', async () => {
+  const { env, db } = newEnv();
+  const auth = { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' };
+  const save = (id, name) => call(env, '/household/members', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, id, name }),
+  });
+  const from = `mem_${'b'.repeat(32)}`;
+  const into = `mem_${'c'.repeat(32)}`;
+  assert.equal((await save(from, 'はる')).status, 200);
+  assert.equal((await save(into, 'はる')).status, 200);
+  const merged = await call(env, '/household/members/merge', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, from, into }),
+  });
+  assert.equal(merged.status, 200);
+  assert.deepEqual(merged.body.members.map((m) => m.id), [into]);
+  assert.equal(merged.body.aliases[from], into);
+
+  const same = await call(env, '/household/members/merge', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, from: into, into }),
+  });
+  assert.equal(same.status, 400);
+  const unknown = await call(env, '/household/members/merge', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, from: `mem_${'z'.repeat(32)}`, into }),
+  });
+  assert.equal(unknown.status, 400);
+  const denied = await call(env, '/household/members/merge', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${OTHER_TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ household: HOME, from, into }),
+  });
+  assert.equal(denied.status, 401);
+  assert.equal(Number(db.prepare("SELECT count(*) AS n FROM member_aliases").get().n), 1);
+});
+
+test('使っていない人を外すと対応表は残る', async () => {
+  const { env } = newEnv();
+  const auth = { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' };
+  const id = `mem_${'d'.repeat(32)}`;
+  assert.equal((await call(env, '/household/members', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, id, name: 'おばあちゃん' }),
+  })).status, 200);
+  const removed = await call(env, '/household/members/remove', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, id }),
+  });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(removed.body.members, []);
+  const bad = await call(env, '/household/members/remove', {
+    method: 'POST', headers: auth, body: JSON.stringify({ household: HOME, id: 'not-a-member' }),
+  });
+  assert.equal(bad.status, 400);
+});
