@@ -387,6 +387,7 @@ class _IssueRow extends StatelessWidget {
     final dim = done ? 0.45 : 1.0;
     return InkWell(
       onTap: onTap,
+      excludeFromSemantics: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
         child: Row(
@@ -410,8 +411,17 @@ class _IssueRow extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Semantics(
+                button: !done,
+                onTap: onTap,
+                label: [
+                  issue.title,
+                  ...meta,
+                  done ? 'おわった' : 'やること',
+                ].join('、'),
+                child: ExcludeSemantics(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -443,7 +453,9 @@ class _IssueRow extends StatelessWidget {
                       ),
                     ],
                   ],
+                  ),
                 ),
+              ),
               ),
             ),
             if (done)
