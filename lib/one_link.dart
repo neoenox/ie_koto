@@ -55,7 +55,9 @@ class OneLink {
       'api': ?apiUrl,
       if (expiresAt != null) 'e': '${expiresAt!.millisecondsSinceEpoch}',
     };
-    return Uri.parse(baseUrl).replace(fragment: '$prefix${Uri(queryParameters: params).query}').toString();
+    return Uri.parse(baseUrl)
+        .replace(fragment: '$prefix${Uri(queryParameters: params).query}')
+        .toString();
   }
 
   /// 開かれたURLから読む。1件リンクでない・欠けている・期限切れなら null。
@@ -74,7 +76,9 @@ class OneLink {
 
     final expiresAt = _expiresOf(params['e']);
     if (params.containsKey('e') && expiresAt == null) return null;
-    if (expiresAt != null && !(now ?? DateTime.now()).isBefore(expiresAt)) return null;
+    if (expiresAt != null && !(now ?? DateTime.now()).isBefore(expiresAt)) {
+      return null;
+    }
 
     final baseUrl = params['api'] ?? _originOf(uri);
     if (baseUrl.isEmpty) return null;

@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 
 /// 小さな選択チップ。色で意味を持たせず、選択だけを見せる。
 class MiniChip extends StatelessWidget {
-  const MiniChip({super.key, required this.label, required this.selected, this.onTap});
+  const MiniChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -15,11 +20,15 @@ class MiniChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
         decoration: BoxDecoration(
-          color: selected ? scheme.primary.withValues(alpha: 0.10) : Colors.transparent,
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
           border: Border.all(
-            color: selected ? scheme.primary.withValues(alpha: 0.45) : scheme.outlineVariant,
+            color: selected ? scheme.primary : scheme.outlineVariant,
+            width: selected ? 1.5 : 1.0,
           ),
           borderRadius: BorderRadius.circular(999),
         ),
@@ -41,15 +50,18 @@ class HairLine extends StatelessWidget {
   const HairLine({super.key});
 
   @override
-  Widget build(BuildContext context) => Container(
-        height: 0.5,
-        color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.7),
-      );
+  Widget build(BuildContext context) =>
+      Container(height: 1, color: Theme.of(context).colorScheme.outlineVariant);
 }
 
 /// 詳細の中の1行。「だれが」「いつまで」「くりかえし」を畳んで置く。
 class AttrRow extends StatelessWidget {
-  const AttrRow({super.key, required this.label, required this.value, required this.onTap});
+  const AttrRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
 
   final String label;
   final String value;
@@ -61,15 +73,27 @@ class AttrRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
             SizedBox(
               width: 76,
-              child: Text(label, style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
             ),
             Expanded(
-              child: Text(value, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500)),
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             Icon(Icons.chevron_right, size: 18, color: scheme.outline),
           ],

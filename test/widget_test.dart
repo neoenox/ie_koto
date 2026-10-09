@@ -47,7 +47,7 @@ void main() {
     await tester.tap(find.text('人を追加'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'あき');
-    await tester.tap(find.widgetWithText(FilledButton, '追加').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'この名前で入れる'));
     await tester.pumpAndSettle();
 
     expect(store.members, hasLength(3));
@@ -60,7 +60,10 @@ void main() {
     await tester.tap(find.text('追加'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const ValueKey('composer-field')), 'トイレットペーパーを買う');
+    await tester.enterText(
+      find.byKey(const ValueKey('composer-field')),
+      'トイレットペーパーを買う',
+    );
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
@@ -103,7 +106,9 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(IeKotoApp(store: IssueStore.demo(clock: () => now)));
+    await tester.pumpWidget(
+      IeKotoApp(store: IssueStore.demo(clock: () => now)),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('done-牛乳を買う')));
@@ -111,7 +116,9 @@ void main() {
     expect(find.text('牛乳を買う'), findsOneWidget);
 
     now = now.add(IssueStore.undoWindow + const Duration(seconds: 1));
-    await tester.pump(IssueStore.undoWindow + const Duration(milliseconds: 200));
+    await tester.pump(
+      IssueStore.undoWindow + const Duration(milliseconds: 200),
+    );
     await tester.pumpAndSettle();
     expect(find.text('牛乳を買う'), findsNothing);
   });
@@ -149,13 +156,20 @@ void main() {
     await tester.tap(find.text('追加'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('今日').last);
-    await tester.enterText(find.byKey(const ValueKey('composer-field')), '今日の追加ぶん');
+    await tester.enterText(
+      find.byKey(const ValueKey('composer-field')),
+      '今日の追加ぶん',
+    );
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
     final rect = tester.getRect(find.text('今日の追加ぶん'));
     final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
-    expect(rect.top >= 0 && rect.bottom <= screen.height, isTrue, reason: '追加した行が画面内にある: $rect');
+    expect(
+      rect.top >= 0 && rect.bottom <= screen.height,
+      isTrue,
+      reason: '追加した行が画面内にある: $rect',
+    );
   });
 
   testWidgets('消すときは確かめる。やめるなら残り、消すなら一覧から無くなる', (tester) async {
@@ -193,8 +207,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(issue.title));
     await tester.pumpAndSettle();
-    expect(find.text('操作：自分'), findsNWidgets(2));
-    expect(find.text('操作：パートナー'), findsOneWidget);
+    expect(find.text('自分'), findsNWidgets(2));
+    expect(find.text('パートナー'), findsOneWidget);
   });
 
   testWidgets('ひとこと送信は案件を完了せず、独立した完了ボタンだけが完了する', (tester) async {
@@ -230,7 +244,17 @@ void main() {
     final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
     final keyboardTop = screen.height - 800 / tester.view.devicePixelRatio;
     final field = tester.getRect(find.byType(TextField));
-    expect(field.bottom <= keyboardTop, isTrue, reason: '入力欄($field)がキーボード(上端 $keyboardTop)に隠れている');
-    expect(tester.getRect(find.byKey(const ValueKey('detail-comment-send'))).bottom <= keyboardTop, isTrue);
+    expect(
+      field.bottom <= keyboardTop,
+      isTrue,
+      reason: '入力欄($field)がキーボード(上端 $keyboardTop)に隠れている',
+    );
+    expect(
+      tester
+              .getRect(find.byKey(const ValueKey('detail-comment-send')))
+              .bottom <=
+          keyboardTop,
+      isTrue,
+    );
   });
 }
