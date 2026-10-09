@@ -245,4 +245,35 @@ void main() {
     expect(find.text('入力を確認してください'), findsOneWidget);
     expect(find.text('はいっている家にはいる'), findsOneWidget);
   });
+
+  testWidgets('I-4 トークン作り直しは確認が出る', (tester) async {
+    const creds = SyncCredentials(
+      baseUrl: 'http://localhost:9',
+      householdId: 'h',
+      token: 't',
+    );
+    final store = IssueStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HouseholdSheet(
+            current: creds,
+            store: store,
+            onRotateToken: () async => 'new-token',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('トークン・削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('トークンを作り直す'));
+    await tester.pumpAndSettle();
+    expect(find.text('トークンを作り直しますか？'), findsOneWidget);
+
+    await tester.tap(find.text('つづける'));
+    await tester.pumpAndSettle();
+    expect(find.text('トークンを作り直しますか？'), findsNothing);
+  });
 }

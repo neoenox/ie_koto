@@ -16,28 +16,33 @@ class MiniChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
-          border: Border.all(
-            color: selected ? scheme.primary : scheme.outlineVariant,
-            width: selected ? 1.5 : 1.0,
+    // 選択状態を選択肢として読み上げる（色・太字・枠だけでは伝わらない）。
+    return Semantics(
+      selected: selected,
+      button: onTap != null,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.12)
+                : Colors.transparent,
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.outlineVariant,
+              width: selected ? 1.5 : 1.0,
+            ),
+            borderRadius: BorderRadius.circular(999),
           ),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -72,8 +77,11 @@ class AttrRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+      // タップ高さ48を割らない。
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
             SizedBox(

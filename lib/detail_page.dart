@@ -100,10 +100,12 @@ class _DetailPageState extends State<DetailPage> {
               ),
               if (issue.status == IssueStatus.waiting) ...[
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    MiniChip(label: '対応待ち', selected: true, onTap: null),
-                  ],
+                // 表示専用（操作なし）。隣の説明文が意味を持つ。
+                ExcludeSemantics(
+                  excluding: true,
+                  child: IgnorePointer(
+                    child: MiniChip(label: '対応待ち', selected: true, onTap: null),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text('家族・業者などの対応を待っています。まだおわっていません。'),
@@ -304,25 +306,29 @@ class _DetailPageState extends State<DetailPage> {
           child: Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _comment,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _send(issue),
-                  style: const TextStyle(fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: '家族へのひとこと（例：買ってきたよ）',
-                    isDense: true,
-                    filled: true,
-                    fillColor: scheme.surfaceContainerHighest.withValues(
-                      alpha: 0.55,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 11,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
+                child: Semantics(
+                  label: '家族へのひとこと',
+                  textField: true,
+                  child: TextField(
+                    controller: _comment,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(issue),
+                    style: const TextStyle(fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: '家族へのひとこと（例：買ってきたよ）',
+                      isDense: true,
+                      filled: true,
+                      fillColor: scheme.surfaceContainerHighest.withValues(
+                        alpha: 0.55,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 11,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                 ),
@@ -474,8 +480,7 @@ class _DetailPageState extends State<DetailPage> {
         ],
       ),
     );
-    controller.dispose();
-    error.dispose();
+    // popのアニメーション中に破棄するとTextFieldが壊れるため、破棄しない。
   }
 
   Future<void> _pickAssignee(Issue issue) async {
