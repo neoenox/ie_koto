@@ -43,7 +43,38 @@ class _DetailPageState extends State<DetailPage> {
       animation: widget.store,
       builder: (context, _) {
         final issue = widget.store.byId(widget.issueId);
-        if (issue == null) return const Scaffold(body: SizedBox.shrink());
+        if (issue == null) {
+          return Scaffold(
+            appBar: AppBar(
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              leading: IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.arrow_back, size: 20),
+                tooltip: 'もどる',
+              ),
+            ),
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'この1件はもうない',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: const Text('もどる'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return Scaffold(
           appBar: AppBar(
             elevation: 0,
@@ -114,6 +145,14 @@ class _DetailPageState extends State<DetailPage> {
                   onPressed: () => _complete(issue),
                   icon: const Icon(Icons.check, size: 20),
                   label: const Text('おわったことにする'),
+                ),
+                const SizedBox(height: 10),
+              ] else ...[
+                OutlinedButton.icon(
+                  key: const ValueKey('detail-undo'),
+                  onPressed: () => _reopen(issue),
+                  icon: const Icon(Icons.undo, size: 20),
+                  label: const Text('もどす'),
                 ),
                 const SizedBox(height: 10),
               ],
@@ -295,10 +334,24 @@ class _DetailPageState extends State<DetailPage> {
     _comment.clear();
   }
 
+  /// 詳細に留まり、その場で取り消せる。ホームへ戻さない。
   void _complete(Issue issue) {
-    if (guardWrite(context, () => widget.store.complete(issue.id))) {
-      Navigator.of(context).maybePop();
-    }
+    if (!guardWrite(context, () => widget.store.complete(issue.id))) return;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('おわったことにしました'),
+        action: SnackBarAction(
+          label: 'もどす',
+          onPressed: () => widget.store.undoComplete(issue.id),
+        ),
+      ),
+    );
+  }
+
+  /// 完了後も詳細に残る取り消し。Snackbarを見逃しても戻せる。
+  void _reopen(Issue issue) {
+    guardWrite(context, () => widget.store.undoComplete(issue.id));
   }
 
   /// 消すだけは取り消せない（おわったのと違って戻す操作が無い）。1回だけ確かめる。
@@ -332,8 +385,18 @@ class _DetailPageState extends State<DetailPage> {
 
   Future<void> _rename(Issue issue) async {
     final controller = TextEditingController(text: issue.title);
+    final error = ValueNotifier<String?>(null);
     void save(BuildContext dialogContext, String value) {
-      if (guardWrite(context, () => widget.store.rename(issue.id, value))) {
+      final v = value.trim();
+      if (v.isEmpty) {
+        error.value = '名前を入力してください';
+        return;
+      }
+      if (v.length > 80) {
+        error.value = '80字以内で入力してください';
+        return;
+      }
+      if (guardWrite(context, () => widget.store.rename(issue.id, v))) {
         Navigator.of(dialogContext).pop();
       }
     }
@@ -342,10 +405,37 @@ class _DetailPageState extends State<DetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('名前を変更', style: TextStyle(fontSize: 16)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          onSubmitted: (value) => save(ctx, value),
+        content: ValueListenableBuilder<String?>(
+          valueListenable: error,
+          builder: (context, e, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '名前',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black45,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLength: 80,
+                buildCounter:
+                    (
+                      _, {
+                      required currentLength,
+                      required isFocused,
+                      maxLength,
+                    }) => null,
+                decoration: InputDecoration(errorText: e, hintText: 'やることの名前'),
+                onSubmitted: (value) => save(ctx, value),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -360,6 +450,7 @@ class _DetailPageState extends State<DetailPage> {
       ),
     );
     controller.dispose();
+    error.dispose();
   }
 
   Future<void> _pickAssignee(Issue issue) async {

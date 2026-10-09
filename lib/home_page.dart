@@ -48,6 +48,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   Timer? _sweep;
   final ScrollController _scroll = ScrollController();
+  final GlobalKey<ComposerState> _composerKey = GlobalKey<ComposerState>();
 
   @override
   void initState() {
@@ -129,6 +130,9 @@ class _HomePageState extends State<HomePage> {
     final later = store.laterRows;
     _rowKeys.removeWhere((id, _) => store.byId(id) == null);
     final empty = today.isEmpty && later.isEmpty;
+    // 未接続のあいだは手順を残す。空でなくてもつなげる案内は消さない。
+    final showSteps =
+        widget.credentials == null && widget.onOpenHousehold != null;
 
     return Scaffold(
       body: SafeArea(
@@ -170,13 +174,43 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
             ),
+            if (showSteps && !empty) _connectStrip(),
             Composer(
+              key: _composerKey,
               store: store,
               onAdded: _scrollTo,
               compact: MediaQuery.viewInsetsOf(context).bottom > 0,
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 1件でも入ったら、手順1は終わり。2だけ細帯で残す。
+  /// キーボード表示中は隠してoverflowを避ける。
+  Widget _connectStrip() {
+    if (MediaQuery.of(context).viewInsets.bottom > 0) {
+      return const SizedBox.shrink();
+    }
+    final openHousehold = widget.onOpenHousehold!;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(
+              context,
+            ).colorScheme.outlineVariant.withValues(alpha: 0.8),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: OutlinedButton(
+        key: const ValueKey('empty-household'),
+        onPressed: () => _openSheet(openHousehold),
+        child: const Text('2 家族とつなげる'),
       ),
     );
   }
@@ -250,8 +284,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _doneEntry() => Align(
-    alignment: Alignment.centerLeft,
+  Widget _doneEntry({bool center = false}) => Align(
+    alignment: center ? Alignment.center : Alignment.centerLeft,
     child: TextButton(
       key: const ValueKey('done-open'),
       onPressed: () => Navigator.of(context).push(
@@ -335,30 +369,80 @@ class _HomePageState extends State<HomePage> {
     return words.take(2).toList();
   }
 
-  Widget _empty() => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'いまは何もない',
-          style: TextStyle(
-            fontSize: 15,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+  /// 手順からシートへ移るときは、開いた追加欄を先に畳む（重ねない）。
+  void _openSheet(Future<void> Function(BuildContext context) openHousehold) {
+    _composerKey.currentState?.close();
+    openHousehold(context);
+  }
+
+  Widget _empty() {
+    // 未接続のあいだだけ手順を出す（つなげたら卒業。デモ入り起動とも整合する）。
+    final showSteps =
+        widget.credentials == null && widget.onOpenHousehold != null;
+    final openHousehold = widget.onOpenHousehold;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'いまは何もない',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (showSteps)
+                Text(
+                  'はじめの2ステップ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              if (showSteps) const SizedBox(height: 8),
+              FilledButton.icon(
+                key: const ValueKey('empty-add'),
+                onPressed: () => _composerKey.currentState?.open(),
+                icon: const Icon(Icons.add, size: 20),
+                label: Text(showSteps ? '1 追加してみる' : '追加する'),
+              ),
+              if (showSteps && openHousehold != null) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  key: const ValueKey('empty-household'),
+                  onPressed: () => _openSheet(openHousehold),
+                  child: const Text('2 家族とつなげる'),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Center(child: _doneEntry(center: true)),
+              if (!showSteps)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '気づいたときに 追加 で入れておく',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        _doneEntry(),
-        const SizedBox(height: 6),
-        Text(
-          '気づいたときに 追加 で入れておく',
-          style: TextStyle(
-            fontSize: 12.5,
-            color: Theme.of(context).colorScheme.outline,
-          ),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _IssueRow extends StatelessWidget {
@@ -385,73 +469,95 @@ class _IssueRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final dim = done ? 0.45 : 1.0;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 48,
-              height: 52,
-              child: IconButton(
-                key: ValueKey(
-                  done ? 'undo-${issue.title}' : 'done-${issue.title}',
-                ),
-                onPressed: done ? onUndo : onDone,
-                iconSize: 24,
-                tooltip: done ? 'もどす' : 'おわった',
-                icon: Icon(
-                  done ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: done
-                      ? scheme.primary.withValues(alpha: 0.5)
-                      : scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      issue.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w500,
-                        color: scheme.onSurface.withValues(alpha: dim),
-                        decoration: done ? TextDecoration.lineThrough : null,
-                        decorationColor: scheme.onSurfaceVariant,
-                      ),
+    final metaWords = meta.join('・');
+    final semanticsLabel = done
+        ? (metaWords.isEmpty
+              ? '${issue.title}、おわった'
+              : '${issue.title}、$metaWords、おわった')
+        : (metaWords.isEmpty ? issue.title : '${issue.title}、$metaWords');
+    return Semantics(
+      button: onTap != null,
+      label: semanticsLabel,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 48,
+                height: 52,
+                // 完了行のもどすは右のボタンに一本化し、読み上げの重複を避ける。
+                child: ExcludeSemantics(
+                  excluding: done,
+                  child: IconButton(
+                    key: ValueKey(
+                      done ? 'undo-${issue.title}' : 'done-${issue.title}',
                     ),
-                    if (meta.isNotEmpty || done) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        done ? 'おわった' : meta.join('・'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: overdue && !done
-                              ? scheme.error.withValues(alpha: 0.85)
-                              : scheme.onSurfaceVariant.withValues(alpha: dim),
-                        ),
-                      ),
-                    ],
-                  ],
+                    onPressed: done ? onUndo : onDone,
+                    iconSize: 24,
+                    tooltip: done ? 'もどす' : 'おわった',
+                    icon: Icon(
+                      done ? Icons.check_circle : Icons.radio_button_unchecked,
+                      color: done
+                          ? scheme.primary.withValues(alpha: 0.5)
+                          : scheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            if (done)
-              TextButton(
-                onPressed: onUndo,
-                child: const Text('もどす', style: TextStyle(fontSize: 13)),
-              ),
-          ],
+              // 本文は親ラベルに集約し、二重読みを避ける。
+              Expanded(
+                child: ExcludeSemantics(
+                  excluding: true,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          issue.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w500,
+                            color: scheme.onSurface.withValues(alpha: dim),
+                            decoration: done
+                                ? TextDecoration.lineThrough
+                                : null,
+                            decorationColor: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (meta.isNotEmpty || done) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            done ? 'おわった' : meta.join('・'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: overdue && !done
+                                  ? scheme.error.withValues(alpha: 0.85)
+                                  : scheme.onSurfaceVariant.withValues(
+                                      alpha: dim,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ), // Expanded
+              if (done)
+                TextButton(
+                  onPressed: onUndo,
+                  child: const Text('もどす', style: TextStyle(fontSize: 13)),
+                ),
+            ],
+          ),
         ),
       ),
     );

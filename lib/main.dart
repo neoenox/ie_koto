@@ -47,6 +47,12 @@ class IeKotoApp extends StatefulWidget {
 }
 
 class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
+  /// 試し書きのデモを入れずに空で始める（確認用ビルド専用。指定が無ければデモ入り）。
+  static const noDemoSeed = bool.fromEnvironment(
+    'IE_KOTO_NO_DEMO',
+    defaultValue: false,
+  );
+
   /// 端末に残しておいたものから開く（初回だけ、触って確かめる用のデータが入る）。
   late IssueStore _store;
   Storage? _activeStorage;
@@ -68,9 +74,9 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
     _activeStorage = _storageFor(credentials?.householdId);
     _store =
         widget.store ??
-        (credentials == null
+        (credentials == null && !noDemoSeed
             ? IssueStore.demo(storage: _activeStorage)
-            : IssueStore(storage: _activeStorage));
+            : IssueStore(startAlone: noDemoSeed, storage: _activeStorage));
     final scopedSaved = _activeStorage?.load().sync;
     final selected =
         credentials != null &&
@@ -154,7 +160,9 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
     setState(() {
       _activeStorage = _storageFor(null);
       if (widget.store == null) {
-        _store = IssueStore.demo(storage: _activeStorage);
+        _store = noDemoSeed
+            ? IssueStore(startAlone: true, storage: _activeStorage)
+            : IssueStore.demo(storage: _activeStorage);
       }
       _startSession(null);
     });

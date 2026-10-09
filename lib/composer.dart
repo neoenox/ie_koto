@@ -25,10 +25,10 @@ class Composer extends StatefulWidget {
   final ValueChanged<Issue>? onAdded;
 
   @override
-  State<Composer> createState() => _ComposerState();
+  State<Composer> createState() => ComposerState();
 }
 
-class _ComposerState extends State<Composer> {
+class ComposerState extends State<Composer> {
   final TextEditingController _text = TextEditingController();
   final FocusNode _focus = FocusNode();
 
@@ -43,6 +43,12 @@ class _ComposerState extends State<Composer> {
     _focus.dispose();
     super.dispose();
   }
+
+  /// 空状態の「追加する」から開く。
+  void open() => _openComposer();
+
+  /// 世帯シートへ移るときなど、開いた追加欄を畳む。
+  void close() => _close();
 
   void _openComposer() {
     setState(() => _open = true);

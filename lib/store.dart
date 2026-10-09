@@ -22,6 +22,7 @@ class IssueStore extends ChangeNotifier {
     List<Member>? members,
     String? initialMeId,
     Map<String, String> legacyMemberAliases = const {},
+    bool startAlone = false,
   }) {
     final saved = storage?.load();
     final savedNames = saved?.memberNames ?? const <String, String>{};
@@ -35,6 +36,8 @@ class IssueStore extends ChangeNotifier {
                 for (final entry in savedNames.entries)
                   Member(entry.key, entry.value),
               ]
+            : startAlone
+            ? const [Member('me', '自分')]
             : const [Member('me', '自分'), Member('partner', 'パートナー')]);
     final named = <String, Member>{
       for (final m in base)

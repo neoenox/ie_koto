@@ -156,8 +156,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             const SizedBox(width: 8),
             Expanded(
               child: TextButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(const HouseholdLeave()),
+                onPressed: () => _confirmLeave(),
                 child: const Text('つながりをやめる'),
               ),
             ),
@@ -292,6 +291,29 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     return ok == true;
   }
 
+  /// つながりをやめると同期が止まり、戻るには3つの入れ直しが要る。1回だけ確かめる。
+  Future<void> _confirmLeave() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('つながりをやめますか？', style: TextStyle(fontSize: 16)),
+        content: const Text('家族との同期が止まります。端末の記録は残ります。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('つづける'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('やめる'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    Navigator.of(context).pop(const HouseholdLeave());
+  }
+
   Widget _line(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -320,17 +342,20 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     );
   }
 
+  /// 欄の見出しは上に置く（枠に重ねるフローティング表示は使わない）。
+  Widget _caption(String text) => _SheetCaption(text: text);
+
   Widget _form() {
     final creating = _mode == _Mode.create;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!creating || _current != null) const SizedBox(height: 8),
+        _caption('場所（APIのURL）'),
         TextField(
           controller: _base,
           keyboardType: TextInputType.url,
           decoration: const InputDecoration(
-            labelText: '場所（APIのURL）',
             hintText: 'https://…',
             isDense: true,
             border: OutlineInputBorder(),
@@ -338,19 +363,19 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         ),
         if (!creating) ...[
           const SizedBox(height: 10),
+          _caption('世帯id'),
           TextField(
             controller: _household,
             decoration: const InputDecoration(
-              labelText: '世帯id',
               isDense: true,
               border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 10),
+          _caption('トークン'),
           TextField(
             controller: _token,
             decoration: const InputDecoration(
-              labelText: 'トークン',
               isDense: true,
               border: OutlineInputBorder(),
             ),
@@ -486,6 +511,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     return _MemberNameField(
       key: ValueKey(id),
       name: name,
+      label: '$nameの表示名',
       onSave: (value) => store.renameMember(id, value),
     );
   }
@@ -621,9 +647,15 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
 
 /// メンバーごとに入力を保持し、別の入力欄へ移ったときにも保存する。
 class _MemberNameField extends StatefulWidget {
-  const _MemberNameField({super.key, required this.name, required this.onSave});
+  const _MemberNameField({
+    super.key,
+    required this.name,
+    required this.label,
+    required this.onSave,
+  });
 
   final String name;
+  final String label;
   final ValueChanged<String> onSave;
 
   @override
@@ -669,17 +701,42 @@ class _MemberNameFieldState extends State<_MemberNameField> {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 6),
-    child: TextField(
-      controller: _controller,
-      focusNode: _focus,
-      maxLength: 80,
-      decoration: const InputDecoration(
-        isDense: true,
-        border: OutlineInputBorder(),
-        counterText: '',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SheetCaption(text: widget.label),
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          maxLength: 80,
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+            counterText: '',
+          ),
+          onSubmitted: (_) => _save(),
+          onTapOutside: (_) => _focus.unfocus(),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 状態を持たない見出し。枠に重ねるフローティング表示は使わない。
+class _SheetCaption extends StatelessWidget {
+  const _SheetCaption({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 12.5,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
-      onSubmitted: (_) => _save(),
-      onTapOutside: (_) => _focus.unfocus(),
     ),
   );
 }
