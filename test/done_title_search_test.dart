@@ -54,7 +54,8 @@ void main() {
     await tester.tap(find.text('洗濯機を修理'));
     await tester.pumpAndSettle();
     expect(find.byType(DetailPage), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('もどる'));
+    await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(input).controller!.text, '修理');
 
