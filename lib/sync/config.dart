@@ -21,7 +21,8 @@ class SyncConfig {
   static const String _token = String.fromEnvironment('IE_KOTO_TOKEN');
 
   /// ビルドのときに渡されているか。
-  static bool get configured => _baseUrl.isNotEmpty && _household.isNotEmpty && _token.length >= 32;
+  static bool get configured =>
+      _baseUrl.isNotEmpty && _household.isNotEmpty && _token.length >= 32;
 
   /// 使う設定を決める。**渡したもの（`--dart-define`）が最優先。**
   /// 渡していなければ、端末に残しておいたものを使う（渡した設定は、最初の同期で残る）。
@@ -37,7 +38,11 @@ class SyncConfig {
     if (baseUrl.isEmpty || household.isEmpty || token.length < 32) return saved;
 
     final url = baseUrl.replaceAll(RegExp(r'/+$'), '');
-    final same = saved != null && saved.baseUrl == url && saved.householdId == household && saved.token == token;
+    final same =
+        saved != null &&
+        saved.baseUrl == url &&
+        saved.householdId == household &&
+        saved.token == token;
     return SyncCredentials(
       baseUrl: url,
       householdId: household,

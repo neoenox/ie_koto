@@ -11,47 +11,57 @@ import 'support/worker_server.dart';
 ///
 /// 起動は [WorkerServer]（server/test/serve.mjs）。node が無い環境では飛ばす。
 void main() {
-  test('2台が実際に同期して、同じ画面になり、完了すると次の1件が1つだけ出る', () async {
-    final worker = await WorkerServer.start();
-    if (worker == null) return markTestSkipped('node が無いので飛ばす');
-    addTearDown(worker.stop);
+  test(
+    '2台が実際に同期して、同じ画面になり、完了すると次の1件が1つだけ出る',
+    () async {
+      final worker = await WorkerServer.start();
+      if (worker == null) return markTestSkipped('node が無いので飛ばす');
+      addTearDown(worker.stop);
 
-    final a = _store('devA');
-    final b = _store('devB');
-    final sessionA = _session(a, worker.baseUrl);
-    final sessionB = _session(b, worker.baseUrl);
+      final a = _store('devA');
+      final b = _store('devB');
+      final sessionA = _session(a, worker.baseUrl);
+      final sessionB = _session(b, worker.baseUrl);
 
-    // Aが定期案件を足して送る。
-    final bath = a.add(title: 'お風呂そうじ 🛁', dueDate: DateTime(2026, 10, 6), recurrence: Recurrence.daily);
-    final first = await sessionA.syncNow();
-    expect(first.sent, 1);
-    expect(first.received, 0);
+      // Aが定期案件を足して送る。
+      final bath = a.add(
+        title: 'お風呂そうじ 🛁',
+        dueDate: DateTime(2026, 10, 6),
+        recurrence: Recurrence.daily,
+      );
+      final first = await sessionA.syncNow();
+      expect(first.sent, 1);
+      expect(first.received, 0);
 
-    // Bはまだ何も知らない。同期すると、もらえる。
-    final onB = await sessionB.syncNow();
-    expect(onB.received, 1);
-    expect(b.byId(bath.id)?.title, 'お風呂そうじ 🛁');
-    expect(b.byId(bath.id)?.recurrence.label, '毎日');
-    expect(b.outbox, isEmpty, reason: 'もらったopを送り返さない');
-    expect(_view(b), _view(a));
+      // Bはまだ何も知らない。同期すると、もらえる。
+      final onB = await sessionB.syncNow();
+      expect(onB.received, 1);
+      expect(b.byId(bath.id)?.title, 'お風呂そうじ 🛁');
+      expect(b.byId(bath.id)?.recurrence.label, '毎日');
+      expect(b.outbox, isEmpty, reason: 'もらったopを送り返さない');
+      expect(_view(b), _view(a));
 
-    // Bが完了すると、Aにも同じ「次の1件」が出る。
-    b.complete(bath.id);
-    await sessionB.syncNow();
-    await sessionA.syncNow();
+      // Bが完了すると、Aにも同じ「次の1件」が出る。
+      b.complete(bath.id);
+      await sessionB.syncNow();
+      await sessionA.syncNow();
 
-    final nextId = nextIssueId(b.ops.firstWhere((op) => op.kind == OpKind.complete).id);
-    expect(nextId, startsWith('next:devB:'));
-    expect(a.openIssues.map((issue) => issue.id), <String>[nextId]);
-    expect(b.openIssues.map((issue) => issue.id), <String>[nextId]);
-    expect(a.byId(nextId)?.dueDate, DateTime(2026, 10, 7));
-    expect(_view(b), _view(a));
+      final nextId = nextIssueId(
+        b.ops.firstWhere((op) => op.kind == OpKind.complete).id,
+      );
+      expect(nextId, startsWith('next:devB:'));
+      expect(a.openIssues.map((issue) => issue.id), <String>[nextId]);
+      expect(b.openIssues.map((issue) => issue.id), <String>[nextId]);
+      expect(a.byId(nextId)?.dueDate, DateTime(2026, 10, 7));
+      expect(_view(b), _view(a));
 
-    // 2回目の同期は、もう何も運ばない（cursorの先だけを見ている）。
-    final quiet = await sessionA.syncNow();
-    expect(quiet.empty, isTrue);
-    expect(quiet.skipped, 0);
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      // 2回目の同期は、もう何も運ばない（cursorの先だけを見ている）。
+      final quiet = await sessionA.syncNow();
+      expect(quiet.empty, isTrue);
+      expect(quiet.skipped, 0);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('Workerのページング越しでも、最後には全部そろう', () async {
     final worker = await WorkerServer.start();
@@ -82,7 +92,11 @@ void main() {
 
     final a = _store('devA');
     final sessionA = _session(a, worker.baseUrl);
-    final api = SyncApi(baseUrl: worker.baseUrl, householdId: _household, token: _token);
+    final api = SyncApi(
+      baseUrl: worker.baseUrl,
+      householdId: _household,
+      token: _token,
+    );
     addTearDown(api.close);
 
     final milk = a.add(title: '牛乳を買う');
@@ -102,11 +116,21 @@ void main() {
     expect(again.cursor, first.cursor, reason: 'cursorも進まない');
 
     // トークンが違えば、本物のWorkerも断る。
-    final stranger = SyncApi(baseUrl: worker.baseUrl, householdId: _household, token: 'stranger-token-stranger-token-stranger-token');
+    final stranger = SyncApi(
+      baseUrl: worker.baseUrl,
+      householdId: _household,
+      token: 'stranger-token-stranger-token-stranger-token',
+    );
     addTearDown(stranger.close);
     await expectLater(
       stranger.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'unauthorized')),
+      throwsA(
+        isA<SyncException>().having(
+          (error) => error.code,
+          'code',
+          'unauthorized',
+        ),
+      ),
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
@@ -118,20 +142,25 @@ const String _token = 'e2e-token-e2e-token-e2e-token-e2e-token-e2e';
 IssueStore _store(String deviceId) =>
     IssueStore(deviceId: deviceId, clock: () => DateTime(2026, 10, 6, 8));
 
-SyncSession _session(IssueStore store, String baseUrl, {int? pageLimit}) => SyncSession(
+SyncSession _session(IssueStore store, String baseUrl, {int? pageLimit}) =>
+    SyncSession(
       store: store,
-      api: SyncApi(baseUrl: baseUrl, householdId: _household, token: _token, pageLimit: pageLimit),
+      api: SyncApi(
+        baseUrl: baseUrl,
+        householdId: _household,
+        token: _token,
+        pageLimit: pageLimit,
+      ),
     );
 
 Map<String, String> _view(IssueStore store) => <String, String>{
-      for (final issue in store.all)
-        issue.id: <String>[
-          issue.title,
-          issue.status.name,
-          issue.dueDate?.toIso8601String() ?? '-',
-          issue.recurrence.label,
-          issue.assigneeId ?? '-',
-          issue.seriesKey,
-        ].join('|'),
-    };
-
+  for (final issue in store.all)
+    issue.id: <String>[
+      issue.title,
+      issue.status.name,
+      issue.dueDate?.toIso8601String() ?? '-',
+      issue.recurrence.label,
+      issue.assigneeId ?? '-',
+      issue.seriesKey,
+    ].join('|'),
+};

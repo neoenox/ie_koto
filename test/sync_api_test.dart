@@ -33,7 +33,11 @@ void main() {
       kind: OpKind.add,
       issueId: 'A:1',
       at: DateTime(2026, 10, 6, 8),
-      data: <String, Object?>{'title': 'お風呂そうじ 🛁', 'dueDate': DateTime(2026, 10, 7), 'recurrence': Recurrence.daily},
+      data: <String, Object?>{
+        'title': 'お風呂そうじ 🛁',
+        'dueDate': DateTime(2026, 10, 7),
+        'recurrence': Recurrence.daily,
+      },
     );
 
     final pushed = await api.push(<Op>[op]);
@@ -55,7 +59,14 @@ void main() {
   });
 
   test('二重送信しても増えない（op_idが主キー）', () async {
-    final op = Op(deviceId: 'A', lamport: 1, kind: OpKind.add, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'title': '牛乳'});
+    final op = Op(
+      deviceId: 'A',
+      lamport: 1,
+      kind: OpKind.add,
+      issueId: 'A:1',
+      at: DateTime(2026, 10, 6),
+      data: <String, Object?>{'title': '牛乳'},
+    );
 
     await api.push(<Op>[op]);
     final second = await api.push(<Op>[op]);
@@ -77,7 +88,14 @@ void main() {
 
     await api.push(<Op>[
       for (var i = 1; i <= 5; i++)
-        Op(deviceId: 'A', lamport: i, kind: OpKind.comment, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'text': 'メモ$i'}),
+        Op(
+          deviceId: 'A',
+          lamport: i,
+          kind: OpKind.comment,
+          issueId: 'A:1',
+          at: DateTime(2026, 10, 6),
+          data: <String, Object?>{'text': 'メモ$i'},
+        ),
     ]);
 
     final collected = <Op>[];
@@ -90,14 +108,27 @@ void main() {
       if (page.ops.isEmpty) break;
     }
 
-    expect(collected.map((op) => op.id), <String>['A:1', 'A:2', 'A:3', 'A:4', 'A:5']);
+    expect(collected.map((op) => op.id), <String>[
+      'A:1',
+      'A:2',
+      'A:3',
+      'A:4',
+      'A:5',
+    ]);
     expect(server.pulls, greaterThan(1), reason: 'limit を守って分けて取る');
   });
 
   test('一度に送れる数を超えたら、分けて送る', () async {
     final ops = <Op>[
       for (var i = 1; i <= SyncApi.maxOpsPerPost + 50; i++)
-        Op(deviceId: 'A', lamport: i, kind: OpKind.comment, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'text': 'メモ$i'}),
+        Op(
+          deviceId: 'A',
+          lamport: i,
+          kind: OpKind.comment,
+          issueId: 'A:1',
+          at: DateTime(2026, 10, 6),
+          data: <String, Object?>{'text': 'メモ$i'},
+        ),
     ];
 
     final result = await api.push(ops);
@@ -109,16 +140,41 @@ void main() {
   });
 
   test('トークンが違えば unauthorized', () async {
-    final wrong = SyncApi(baseUrl: server.baseUrl, householdId: 'hh_test00000000000000000000000', token: 'wrong-token-wrong-token-wrong-token-wrong');
+    final wrong = SyncApi(
+      baseUrl: server.baseUrl,
+      householdId: 'hh_test00000000000000000000000',
+      token: 'wrong-token-wrong-token-wrong-token-wrong',
+    );
     addTearDown(wrong.close);
 
     await expectLater(
       wrong.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'unauthorized')),
+      throwsA(
+        isA<SyncException>().having(
+          (error) => error.code,
+          'code',
+          'unauthorized',
+        ),
+      ),
     );
     await expectLater(
-      wrong.push(<Op>[Op(deviceId: 'A', lamport: 1, kind: OpKind.comment, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'text': 'x'})]),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'unauthorized')),
+      wrong.push(<Op>[
+        Op(
+          deviceId: 'A',
+          lamport: 1,
+          kind: OpKind.comment,
+          issueId: 'A:1',
+          at: DateTime(2026, 10, 6),
+          data: <String, Object?>{'text': 'x'},
+        ),
+      ]),
+      throwsA(
+        isA<SyncException>().having(
+          (error) => error.code,
+          'code',
+          'unauthorized',
+        ),
+      ),
     );
   });
 
@@ -126,21 +182,35 @@ void main() {
     server.forcedStatus = 500;
     await expectLater(
       api.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'server')),
+      throwsA(
+        isA<SyncException>().having((error) => error.code, 'code', 'server'),
+      ),
     );
 
     server.forcedStatus = 400;
     server.forcedBody = '{"error":"bad_ops"}';
     await expectLater(
       api.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'bad_request')),
+      throwsA(
+        isA<SyncException>().having(
+          (error) => error.code,
+          'code',
+          'bad_request',
+        ),
+      ),
     );
 
     server.forcedStatus = 200;
     server.forcedBody = 'これはJSONではない';
     await expectLater(
       api.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'bad_response')),
+      throwsA(
+        isA<SyncException>().having(
+          (error) => error.code,
+          'code',
+          'bad_response',
+        ),
+      ),
     );
   });
 
@@ -148,25 +218,63 @@ void main() {
     await server.stop();
     await expectLater(
       api.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'offline')),
+      throwsA(
+        isA<SyncException>().having((error) => error.code, 'code', 'offline'),
+      ),
     );
   });
 
   test('応答の途中で切れても offline（中途半端なopを受け取らない）', () async {
-    await api.push(<Op>[Op(deviceId: 'A', lamport: 1, kind: OpKind.add, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'title': '牛乳'})]);
+    await api.push(<Op>[
+      Op(
+        deviceId: 'A',
+        lamport: 1,
+        kind: OpKind.add,
+        issueId: 'A:1',
+        at: DateTime(2026, 10, 6),
+        data: <String, Object?>{'title': '牛乳'},
+      ),
+    ]);
     server.cutResponse = true;
 
     await expectLater(
       api.pull(since: 0),
-      throwsA(isA<SyncException>().having((error) => error.code, 'code', 'offline')),
+      throwsA(
+        isA<SyncException>().having((error) => error.code, 'code', 'offline'),
+      ),
     );
   });
 
   test('壊れたopが混ざっても、読めたものは受け取る', () async {
-    await api.push(<Op>[Op(deviceId: 'A', lamport: 1, kind: OpKind.add, issueId: 'A:1', at: DateTime(2026, 10, 6), data: <String, Object?>{'title': '牛乳'})]);
+    await api.push(<Op>[
+      Op(
+        deviceId: 'A',
+        lamport: 1,
+        kind: OpKind.add,
+        issueId: 'A:1',
+        at: DateTime(2026, 10, 6),
+        data: <String, Object?>{'title': '牛乳'},
+      ),
+    ]);
     server.injectedOps = <Map<String, Object?>>[
-      <String, Object?>{'id': 'A:99', 'deviceId': 'A', 'lamport': 99, 'kind': 'add', 'issueId': 'A:99', 'at': '2026-10-06T08:00:00.000', 'data': <String, Object?>{}},
-      <String, Object?>{'id': 'B:2', 'deviceId': 'B', 'lamport': 2, 'kind': 'comment', 'issueId': 'A:1', 'at': '2026-10-06T09:00:00.000', 'data': <String, Object?>{'text': 'あとから届いたメモ'}},
+      <String, Object?>{
+        'id': 'A:99',
+        'deviceId': 'A',
+        'lamport': 99,
+        'kind': 'add',
+        'issueId': 'A:99',
+        'at': '2026-10-06T08:00:00.000',
+        'data': <String, Object?>{},
+      },
+      <String, Object?>{
+        'id': 'B:2',
+        'deviceId': 'B',
+        'lamport': 2,
+        'kind': 'comment',
+        'issueId': 'A:1',
+        'at': '2026-10-06T09:00:00.000',
+        'data': <String, Object?>{'text': 'あとから届いたメモ'},
+      },
     ];
 
     final page = await api.pull(since: 1);

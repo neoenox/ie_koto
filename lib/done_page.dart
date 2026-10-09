@@ -28,13 +28,19 @@ class DonePage extends StatelessWidget {
               icon: const Icon(Icons.arrow_back, size: 20),
               tooltip: 'もどる',
             ),
-            title: const Text('おわったもの', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            title: const Text(
+              'おわったもの',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
           ),
           body: done.isEmpty
               ? Center(
                   child: Text(
                     'まだおわったものはない',
-                    style: TextStyle(fontSize: 13.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 )
               : ListView.separated(
@@ -48,20 +54,34 @@ class DonePage extends StatelessWidget {
                     final issue = done[index];
                     final at = issue.completedAt;
                     return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
                       title: Text(
                         issue.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       subtitle: Text(
-                        at == null ? 'おわった' : '${timeLabel(at, store.now)}におわった',
-                        style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        at == null
+                            ? 'おわった'
+                            : '${timeLabel(at, store.now)}におわった',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => DetailPage(store: store, issueId: issue.id, linkFor: linkFor),
+                          builder: (_) => DetailPage(
+                            store: store,
+                            issueId: issue.id,
+                            linkFor: linkFor,
+                          ),
                         ),
                       ),
                     );

@@ -17,12 +17,20 @@ void main() {
     addTearDown(tester.view.reset);
 
     final device = MemoryStore();
-    final first = IssueStore(deviceId: 'A', clock: _clock, storage: DeviceStorage(device));
+    final first = IssueStore(
+      deviceId: 'A',
+      clock: _clock,
+      storage: DeviceStorage(device),
+    );
     first.add(title: 'トイレットペーパーを買う', dueDate: DateTime(2026, 10, 6));
     expect(first.all, hasLength(1));
 
     // アプリを開き直したのと同じ（同じ置き場を読み直す）。
-    await tester.pumpWidget(IeKotoApp(store: IssueStore(clock: _clock, storage: DeviceStorage(device))));
+    await tester.pumpWidget(
+      IeKotoApp(
+        store: IssueStore(clock: _clock, storage: DeviceStorage(device)),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('トイレットペーパーを買う'), findsOneWidget);
@@ -35,7 +43,11 @@ void main() {
     addTearDown(tester.view.reset);
 
     final device = MemoryStore();
-    await tester.pumpWidget(IeKotoApp(store: IssueStore.demo(clock: _clock, storage: DeviceStorage(device))));
+    await tester.pumpWidget(
+      IeKotoApp(
+        store: IssueStore.demo(clock: _clock, storage: DeviceStorage(device)),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('牛乳を買う'), findsOneWidget);
