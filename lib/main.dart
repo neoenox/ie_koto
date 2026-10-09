@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'home_page.dart';
 import 'household_sheet.dart';
+import 'join_link.dart';
 import 'model.dart';
 import 'one_link.dart';
 import 'one_page.dart';
@@ -25,13 +26,22 @@ Future<void> main() async {
     return;
   }
 
+  // 参加リンクなら、3値を参加欄に入れたシートまで進める。
+  final joinLink = JoinLink.fromUri(Uri.base);
+
   // 端末に残したものを読む前に、Flutter の準備を整えておく。
   final storage = await DeviceStorage.open();
-  runApp(IeKotoApp(storage: storage));
+  runApp(IeKotoApp(storage: storage, joinLink: joinLink));
 }
 
 class IeKotoApp extends StatefulWidget {
-  const IeKotoApp({super.key, this.store, this.storage, this.oneLink});
+  const IeKotoApp({
+    super.key,
+    this.store,
+    this.storage,
+    this.oneLink,
+    this.joinLink,
+  });
 
   /// 検証用に差し替えられるようにしておく（通常は触って確かめる用のデータで起動する）。
   final IssueStore? store;
@@ -41,6 +51,9 @@ class IeKotoApp extends StatefulWidget {
 
   /// 相手がブラウザで開いた1件リンク。渡されたら、そのページだけを出す。
   final OneLink? oneLink;
+
+  /// 家族に送った参加リンク。渡されたら、参加欄に3値を入れたシートを開く。
+  final JoinLink? joinLink;
 
   @override
   State<IeKotoApp> createState() => _IeKotoAppState();
@@ -59,6 +72,12 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
 
   /// 同期（設計の手順3）。設定が無ければ null のまま＝1人で使う形。
   SyncSession? _session;
+
+  /// 参加リンクの自動表示は1回だけ。
+  bool _joinOpened = false;
+
+  /// シートは MaterialApp の内側の文脈で開く（外側には Navigator がない）。
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   /// いま使っている同期の設定（1件リンクを作るのにも使う）。
   SyncCredentials? _credentials;
@@ -264,7 +283,22 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // 参加リンクで開いたら、3値入りのシートまで進める。接続済みなら出さない。
+    if (widget.joinLink != null &&
+        widget.oneLink == null &&
+        !_joinOpened &&
+        _credentials == null) {
+      _joinOpened = true;
+      final join = widget.joinLink!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final context = _navigatorKey.currentContext;
+        if (context == null) return;
+        _openHousehold(context, initialJoin: join);
+      });
+    }
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _messengerKey,
       title: 'いえこと',
       debugShowCheckedModeBanner: false,
@@ -286,13 +320,17 @@ class _IeKotoAppState extends State<IeKotoApp> with WidgetsBindingObserver {
   }
 
   /// ホームの世帯名から開く。決めた値は保存してセッションを作り直す。
-  Future<void> _openHousehold(BuildContext context) async {
+  Future<void> _openHousehold(
+    BuildContext context, {
+    JoinLink? initialJoin,
+  }) async {
     final here = Uri.base;
     final onWeb = here.scheme == 'http' || here.scheme == 'https';
     final result = await showHouseholdSheet(
       context,
       current: _credentials,
       initialBaseUrl: onWeb ? here.origin : (_credentials?.baseUrl ?? ''),
+      initialJoin: initialJoin,
       store: _store,
       onRotateToken: _credentials == null ? null : _rotateToken,
       onDeleteHousehold: _credentials == null ? null : _deleteHousehold,

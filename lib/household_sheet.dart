@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
+import 'join_link.dart';
 import 'store.dart';
 import 'sync/setup.dart';
 import 'sync/storage.dart';
@@ -17,6 +19,7 @@ class HouseholdSheet extends StatefulWidget {
     super.key,
     required this.current,
     this.initialBaseUrl = '',
+    this.initialJoin,
     this.store,
     this.onRotateToken,
     this.onDeleteHousehold,
@@ -27,6 +30,9 @@ class HouseholdSheet extends StatefulWidget {
 
   /// Webで動いているときの初期値（開いているページのドメイン）。
   final String initialBaseUrl;
+
+  /// 参加リンクから開いたときの3値。あれば「はいる」側に自動で入れる。
+  final JoinLink? initialJoin;
 
   /// 渡すと「この端末はだれ」・表示名・書出し/読込みを出せる。
   final IssueStore? store;
@@ -61,9 +67,18 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   @override
   void initState() {
     super.initState();
-    _base.text = _current?.baseUrl ?? widget.initialBaseUrl;
-    _household.text = _current?.householdId ?? '';
-    _token.text = _current?.token ?? '';
+    final join = widget.initialJoin;
+    // 未接続で参加リンクから開いたときだけ、3値を「はいる」側に入れる。
+    if (join != null && _current == null) {
+      _mode = _Mode.join;
+      _base.text = join.apiBaseUrl;
+      _household.text = join.householdId;
+      _token.text = join.token;
+    } else {
+      _base.text = _current?.baseUrl ?? widget.initialBaseUrl;
+      _household.text = _current?.householdId ?? '';
+      _token.text = _current?.token ?? '';
+    }
   }
 
   @override
@@ -179,8 +194,53 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           ),
         ),
         const SizedBox(height: 12),
+        _inviteSection(current),
+        const SizedBox(height: 12),
         _dangerSection(),
       ],
+    );
+  }
+
+  /// 参加リンクとQR。写すだけ・開くだけで参加欄まで進める。
+  /// トークンはURLの断片に載せる（サーバーに送られない）。
+  Widget _inviteSection(SyncCredentials current) {
+    final appBase = widget.initialBaseUrl.isNotEmpty
+        ? widget.initialBaseUrl
+        : current.baseUrl;
+    final link = JoinLink(
+      baseUrl: appBase,
+      apiUrl: appBase == current.baseUrl ? null : current.baseUrl,
+      householdId: current.householdId,
+      token: current.token,
+    ).text;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SheetCaption(text: '家族をよぶ'),
+        Center(
+          child: QrImageView(
+            data: link,
+            size: 160,
+            backgroundColor: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _copyInviteLink(link),
+            child: const Text('招待リンクをコピー'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _copyInviteLink(String link) async {
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('招待リンクをコピーしました。開くと参加欄に自動で入ります')),
     );
   }
 
@@ -954,6 +1014,7 @@ Future<Object?> showHouseholdSheet(
   BuildContext context, {
   required SyncCredentials? current,
   String initialBaseUrl = '',
+  JoinLink? initialJoin,
   IssueStore? store,
   Future<String?> Function()? onRotateToken,
   Future<bool> Function()? onDeleteHousehold,
@@ -965,6 +1026,7 @@ Future<Object?> showHouseholdSheet(
     builder: (_) => HouseholdSheet(
       current: current,
       initialBaseUrl: initialBaseUrl,
+      initialJoin: initialJoin,
       store: store,
       onRotateToken: onRotateToken,
       onDeleteHousehold: onDeleteHousehold,
