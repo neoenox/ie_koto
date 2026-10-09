@@ -70,9 +70,14 @@ class IssueStore extends ChangeNotifier {
     if (initialMeId != null && initialMeId.isNotEmpty) {
       store.meId = store.canonicalMemberId(initialMeId);
       store.meExplicit = true;
+      store.storage?.saveMeExplicit(true);
     } else if (saved != null && saved.meId.isNotEmpty) {
       store.meId = store.canonicalMemberId(saved.meId);
-      store.meExplicit = true;
+      // 保存済みの本人IDだけでは「選んだ」とはみなさない。
+      // 初回同期の対応表適用でも保存されるため（meExplicit の保存を見る）。
+      store.meExplicit = saved.meExplicit;
+    } else {
+      store.meExplicit = saved?.meExplicit ?? false;
     }
     store._restore(saved ?? const SavedState());
     return store;
@@ -151,6 +156,7 @@ class IssueStore extends ChangeNotifier {
     id = canonicalMemberId(id);
     if (id.isEmpty) return;
     meExplicit = true;
+    storage?.saveMeExplicit(true);
     if (id == meId) return;
     meId = id;
     if (!members.any((m) => m.id == id)) {

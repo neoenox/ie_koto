@@ -21,6 +21,7 @@ class SavedState {
     this.sync,
     this.skippedOps = 0,
     this.meId = '',
+    this.meExplicit = false,
     this.memberNames = const <String, String>{},
     this.memberAliases = const <String, String>{},
     this.pendingMemberNames = const <String, String>{},
@@ -47,6 +48,10 @@ class SavedState {
 
   /// この端末を使う人（member_id）。空なら未設定（'me'扱い）。
   final String meId;
+
+  /// 本人を明示的に選んだかどうか。IDの保存だけでは選んだことにならない
+  /// （初回同期の対応表適用でもIDは保存される）。
+  final bool meExplicit;
 
   /// 最後に受け取ったメンバー名（member_id → 名前）。
   final Map<String, String> memberNames;
@@ -140,6 +145,9 @@ abstract class Storage implements Listenable {
   /// この端末を使う人。
   void saveMeId(String meId);
 
+  /// 本人を明示的に選んだこと。
+  void saveMeExplicit(bool explicit);
+
   /// 表示名の上書き。
   void saveMemberNames(Map<String, String> names);
   void saveMemberAliases(Map<String, String> aliases);
@@ -215,6 +223,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
         pushedKey,
         syncKey,
         meKey,
+        meExplicitKey,
         membersKey,
         aliasesKey,
         pendingMembersKey,
@@ -249,6 +258,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
   static const String relayKey = 'ie_koto.pending_relay_ids';
   static const String syncKey = 'ie_koto.sync';
   static const String meKey = 'ie_koto.me_id';
+  static const String meExplicitKey = 'ie_koto.me_explicit';
   static const String membersKey = 'ie_koto.member_names';
   static const String aliasesKey = 'ie_koto.member_aliases';
   static const String pendingMembersKey = 'ie_koto.pending_members';
@@ -402,6 +412,13 @@ class DeviceStorage extends ChangeNotifier implements Storage {
   }
 
   @override
+  void saveMeExplicit(bool explicit) {
+    _write(meExplicitKey, explicit ? 'true' : '');
+    _cached = null;
+    _cachedFingerprint = null;
+  }
+
+  @override
   void saveMemberNames(Map<String, String> names) {
     _write(membersKey, jsonEncode(names));
     _cached = null;
@@ -448,6 +465,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
       _store.read(relayKey) ?? '',
       _store.read(syncKey) ?? '',
       _store.read(meKey) ?? '',
+      _store.read(meExplicitKey) ?? '',
       _store.read(membersKey) ?? '',
       _store.read(aliasesKey) ?? '',
       _store.read(pendingMembersKey) ?? '',
@@ -484,6 +502,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
       sync: _readSync(),
       skippedOps: decoded.skipped,
       meId: _store.read(meKey) ?? '',
+      meExplicit: _store.read(meExplicitKey) == 'true',
       memberNames: _readMemberNames(),
       memberAliases: _readStringMap(aliasesKey),
       pendingMemberNames: _readStringMap(pendingMembersKey),

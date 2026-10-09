@@ -5,6 +5,8 @@ import 'package:ie_koto/main.dart';
 import 'package:ie_koto/store.dart';
 import 'package:ie_koto/sync/storage.dart';
 
+import 'support/memory_store.dart';
+
 void main() {
   group('#87 予約名', () {
     test('前後の半角・全角空白を落として比べる', () {
@@ -62,6 +64,27 @@ void main() {
       final store = IssueStore();
       store.setMeId('partner');
       expect(store.meExplicit, isTrue);
+    });
+
+    test('同期だけでは本人選択にならない', () {
+      final kv = MemoryStore();
+      final first = IssueStore(storage: DeviceStorage(kv));
+      // 初回同期の対応表適用はIDを保存するが、選んだことにはならない。
+      first.applyMemberAliases({'me': 'mem_x'});
+      expect(first.meExplicit, isFalse);
+
+      final second = IssueStore(storage: DeviceStorage(kv));
+      expect(second.meId, 'mem_x');
+      expect(second.meExplicit, isFalse);
+    });
+
+    test('選んだ本人は再起動後も残る', () {
+      final kv = MemoryStore();
+      final first = IssueStore(storage: DeviceStorage(kv));
+      first.setMeId('partner');
+      final second = IssueStore(storage: DeviceStorage(kv));
+      expect(second.meExplicit, isTrue);
+      expect(second.meId, 'partner');
     });
   });
 
