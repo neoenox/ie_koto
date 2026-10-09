@@ -549,45 +549,190 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   }
 
   Widget _nameRow(IssueStore store, String id, String name) {
+    final isSelf =
+        store.canonicalMemberId(id) == store.canonicalMemberId(store.meId);
+    if (!isSelf) return _otherRow(store, id, name);
     return _MemberNameField(
       key: ValueKey(id),
       name: name,
       label: '$nameの表示名',
-      onSave: (value) => store.renameMember(id, value),
+      onSave: (value) {
+        if (!store.renameMember(id, value)) {
+          final trimmed = IssueStore.normalizeMemberName(value);
+          if (trimmed.isEmpty) return '名前を入力してください';
+          if (IssueStore.isReservedMemberName(trimmed)) {
+            return '「自分」「パートナー」は使えません。なまえ等を入れてください';
+          }
+          return '自分の名前だけ変えられます';
+        }
+        return null;
+      },
     );
   }
 
-  Future<void> _addMember(IssueStore store) async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('人を追加'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 80,
-          decoration: const InputDecoration(
-            labelText: '名前',
-            hintText: '例：あき',
-            counterText: '',
-          ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('やめる'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('この名前で入れる'),
+  /// 他人の行は名前を変えられない。重複の解消（まとめる・はずす）だけできる。
+  Widget _otherRow(IssueStore store, String id, String name) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SheetCaption(text: '$nameの表示名'),
+          Row(
+            children: [
+              Expanded(child: Text(name, style: const TextStyle(fontSize: 15))),
+              TextButton(
+                onPressed: () => _mergeMember(store, id, name),
+                child: const Text('まとめる'),
+              ),
+              TextButton(
+                onPressed: () => _removeMember(store, id, name),
+                child: const Text('はずす'),
+              ),
+            ],
           ),
         ],
       ),
     );
-    if (!mounted || name == null || name.trim().isEmpty) return;
-    store.addMember(name);
+  }
+
+  Future<void> _mergeMember(IssueStore store, String id, String name) async {
+    final others = [
+      for (final m in store.members)
+        if (store.canonicalMemberId(m.id) != store.canonicalMemberId(id)) m,
+    ];
+    if (others.isEmpty) return;
+    final into = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('「$name」をだれにまとめる？', style: const TextStyle(fontSize: 16)),
+        children: [
+          for (final m in others)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(ctx).pop(m.id),
+              child: Text(m.id == store.meId ? '自分' : m.name),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || into == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('まとめてもいいですか？', style: TextStyle(fontSize: 16)),
+        content: Text('「$name」の担当・履歴は残したまま、1人にまとめます。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('やめる'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('まとめる'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (!store.mergeMembers(id, into)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('まとめられませんでした')));
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _removeMember(IssueStore store, String id, String name) async {
+    if (store.hasOpenAssignment(id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('「$name」は未完了の担当があるため外せません。先に担当を変えてください')),
+      );
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('名簿から外しますか？', style: TextStyle(fontSize: 16)),
+        content: Text('「$name」を名簿から外します。これまでの履歴は残ります。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('やめる'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('外す'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (!store.removeMember(id)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('外せませんでした')));
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _addMember(IssueStore store) async {
+    final controller = TextEditingController();
+    String? error;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          void submit() {
+            final trimmed = IssueStore.normalizeMemberName(controller.text);
+            if (trimmed.isEmpty) {
+              setDialog(() => error = '名前を入力してください');
+              return;
+            }
+            if (IssueStore.isReservedMemberName(trimmed)) {
+              setDialog(() => error = '「自分」「パートナー」は使えません。なまえ等を入れてください');
+              return;
+            }
+            Navigator.of(ctx).pop(controller.text);
+          }
+
+          return AlertDialog(
+            title: const Text('人を追加'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 80,
+              decoration: InputDecoration(
+                labelText: '名前',
+                hintText: '例：あき',
+                counterText: '',
+                errorText: error,
+              ),
+              onSubmitted: (_) => submit(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('やめる'),
+              ),
+              FilledButton(onPressed: submit, child: const Text('この名前で入れる')),
+            ],
+          );
+        },
+      ),
+    );
+    // popのアニメーション中に破棄するとTextFieldが壊れるため、破棄しない。
+    if (!mounted || name == null) return;
+    try {
+      store.addMember(name);
+    } on ArgumentError {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('名前を確認してください')));
+    }
+    setState(() {});
   }
 
   /// 記録の引っ越し。書き出したJSONを別の端末で読み込む。
@@ -697,7 +842,9 @@ class _MemberNameField extends StatefulWidget {
 
   final String name;
   final String label;
-  final ValueChanged<String> onSave;
+
+  /// 保存を試み、だめなら理由を返す。nullなら保存できた。
+  final String? Function(String) onSave;
 
   @override
   State<_MemberNameField> createState() => _MemberNameFieldState();
@@ -706,6 +853,7 @@ class _MemberNameField extends StatefulWidget {
 class _MemberNameFieldState extends State<_MemberNameField> {
   late final _controller = TextEditingController(text: widget.name);
   final _focus = FocusNode();
+  String? _error;
 
   @override
   void initState() {
@@ -718,9 +866,9 @@ class _MemberNameFieldState extends State<_MemberNameField> {
   }
 
   void _save() {
-    widget.onSave(_controller.text);
-    // 空白だけの名前は保存できないので、表示も保存済みの名前に戻す。
-    if (_controller.text.trim().isEmpty) _controller.text = widget.name;
+    final error = widget.onSave(_controller.text);
+    if (!mounted) return;
+    setState(() => _error = error);
   }
 
   @override
@@ -728,6 +876,7 @@ class _MemberNameFieldState extends State<_MemberNameField> {
     super.didUpdateWidget(oldWidget);
     if (!_focus.hasFocus && oldWidget.name != widget.name) {
       _controller.text = widget.name;
+      _error = null;
     }
   }
 
@@ -750,10 +899,11 @@ class _MemberNameFieldState extends State<_MemberNameField> {
           controller: _controller,
           focusNode: _focus,
           maxLength: 80,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             isDense: true,
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
             counterText: '',
+            errorText: _error,
           ),
           onSubmitted: (_) => _save(),
           onTapOutside: (_) => _focus.unfocus(),
