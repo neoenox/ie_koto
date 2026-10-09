@@ -32,6 +32,7 @@ void main() {
     await tester.pump();
     expect(store.byId(issue.id)!.isDone, isTrue);
     expect(find.text('完了の確認'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('もどす'));
     await tester.pump();
     expect(store.byId(issue.id)!.isDone, isFalse);
@@ -95,7 +96,7 @@ void main() {
 
   testWidgets('issue row announces title, metadata and completion state', (tester) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
+    // Flutter asserts that semantics handles are disposed before the test ends.
     final now = DateTime(2026, 10, 9, 10);
     final store = IssueStore(clock: () => now);
     final issue = store.add(
@@ -115,5 +116,6 @@ void main() {
       find.bySemanticsLabel(RegExp('読み上げ確認.*今日.*おわった')),
       findsOneWidget,
     );
+    semantics.dispose();
   });
 }
