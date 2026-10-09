@@ -67,6 +67,10 @@ class SyncStatusLine extends StatelessWidget {
                             // 状態表示に残す。端末の記録を消さない。
                           }
                         },
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                  ),
                   child: Text(saveError || failed ? '再試行' : '今すぐ送る'),
                 ),
             ],

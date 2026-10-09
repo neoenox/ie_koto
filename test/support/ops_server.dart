@@ -130,6 +130,48 @@ class OpsServer {
       return;
     }
 
+    if (request.uri.path == '/household/members/merge' &&
+        request.method == 'POST') {
+      final body =
+          jsonDecode(await utf8.decoder.bind(request).join())
+              as Map<String, Object?>;
+      final from = body['from'] as String? ?? '';
+      final into = body['into'] as String? ?? '';
+      if (from.isEmpty ||
+          into.isEmpty ||
+          from == into ||
+          !members.containsKey(from) ||
+          !members.containsKey(into)) {
+        response.statusCode = 400;
+        response.write('{"error":"bad_member"}');
+        await response.close();
+        return;
+      }
+      legacyAliases[from] = into;
+      members.remove(from);
+      response.write(jsonEncode(_memberDirectory()));
+      await response.close();
+      return;
+    }
+
+    if (request.uri.path == '/household/members/remove' &&
+        request.method == 'POST') {
+      final body =
+          jsonDecode(await utf8.decoder.bind(request).join())
+              as Map<String, Object?>;
+      final id = body['id'] as String? ?? '';
+      if (id.isEmpty) {
+        response.statusCode = 400;
+        response.write('{"error":"bad_member"}');
+        await response.close();
+        return;
+      }
+      members.remove(id);
+      response.write(jsonEncode(_memberDirectory()));
+      await response.close();
+      return;
+    }
+
     if (request.method == 'POST' && request.uri.path == '/ops') {
       posts += 1;
       final body =

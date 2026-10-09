@@ -168,22 +168,22 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         _line('場所', current.baseUrl),
         _line('世帯', current.householdId),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _copyInvite(current),
-                child: const Text('招待文をコピー'),
-              ),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _copyInvite(current),
+            child: const Text('招待文をコピー'),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => _confirmLeave(),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextButton(
-                onPressed: () => _confirmLeave(),
-                child: const Text('つながりをやめる'),
-              ),
-            ),
-          ],
+            child: const Text('つながりをやめる'),
+          ),
         ),
         const SizedBox(height: 4),
         Text(
@@ -252,7 +252,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     return ExpansionTile(
       tilePadding: EdgeInsets.zero,
       title: Text(
-        '詳しい設定',
+        'トークン・削除',
         style: TextStyle(
           fontSize: 12.5,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -269,6 +269,30 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
                   onPressed: _rotatingToken
                       ? null
                       : () async {
+                          // 作り直すと古い招待文が使えなくなる不可逆操作。1回確かめる。
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text(
+                                'トークンを作り直しますか？',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              content: const Text(
+                                '古い招待文・招待リンクは使えなくなります。家族に送り直してください。',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text('つづける'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  child: const Text('作り直す'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok != true || !mounted) return;
                           setState(() => _rotatingToken = true);
                           String? token;
                           try {
@@ -759,17 +783,22 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
 
           return AlertDialog(
             title: const Text('人を追加'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 80,
-              decoration: InputDecoration(
-                labelText: '名前',
-                hintText: '例：あき',
-                counterText: '',
-                errorText: error,
-              ),
-              onSubmitted: (_) => submit(),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SheetCaption(text: '名前'),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLength: 80,
+                  decoration: InputDecoration(
+                    hintText: '例：あき',
+                    errorText: error,
+                  ),
+                  onSubmitted: (_) => submit(),
+                ),
+              ],
             ),
             actions: [
               TextButton(
@@ -851,13 +880,23 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('記録を読み込む', style: TextStyle(fontSize: 16)),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            hintText: '書き出したJSONを貼る',
-            border: OutlineInputBorder(),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SheetCaption(text: '書き出した記録'),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              minLines: 3,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              decoration: const InputDecoration(
+                hintText: '書き出したJSONを貼る',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -871,7 +910,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         ],
       ),
     );
-    controller.dispose();
+    // popのアニメーション中に破棄するとTextFieldが壊れるため、破棄しない。
     if (pasted == null || pasted.trim().isEmpty) return;
     try {
       final fresh = store.importJson(pasted);

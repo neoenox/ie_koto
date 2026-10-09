@@ -148,6 +148,16 @@ class ComposerState extends State<Composer> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 見出しは上に置く（シートの入力欄と統一。枠に重ねない）。
+        Text(
+          'やること',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
@@ -165,8 +175,6 @@ class ComposerState extends State<Composer> {
                 },
                 style: const TextStyle(fontSize: 16),
                 decoration: InputDecoration(
-                  labelText: 'やること',
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
                   hintText: '例：牛乳を買う',
                   errorText: _showTitleError ? 'やることを入力してください' : null,
                   filled: true,

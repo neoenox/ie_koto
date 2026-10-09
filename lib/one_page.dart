@@ -137,9 +137,29 @@ class _OnePageState extends State<OnePage> {
               ),
               const SizedBox(height: 26),
               if (issue == null)
-                Text(
-                  _messageForNothing(scheme),
-                  style: const TextStyle(fontSize: 18, height: 1.4),
+                Semantics(
+                  liveRegion: true,
+                  child: _stage == _Stage.loading
+                      ? const Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              '読み込んでいます',
+                              style: TextStyle(fontSize: 18, height: 1.4),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          _messageForNothing(scheme),
+                          style: const TextStyle(fontSize: 18, height: 1.4),
+                        ),
                 )
               else
                 Text(

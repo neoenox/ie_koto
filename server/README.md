@@ -12,6 +12,8 @@ POST /household/rotate  {"household": "<id>", "token": "<新しいトークン>"
 POST /household/members/migrate  旧 me/partner を世帯共通IDへ一度だけ移行
 GET  /household/members?household=<id>                              メンバー一覧
 POST /household/members  {"household":"<id>","id":"mem_…","name":"…"} 表示名を保存
+POST /household/members/merge  {"household":"<id>","from":"mem_…","into":"mem_…"} 重複をまとめる（旧IDは対応表に残し旧行だけ消す）
+POST /household/members/remove  {"household":"<id>","id":"mem_…"} 使っていない人を外す（対応表は残す）
 ```
 
 どれも `Authorization: Bearer <世帯トークン>` が要る。
@@ -28,6 +30,8 @@ POST /household/members  {"household":"<id>","id":"mem_…","name":"…"} 表示
 | 壊れた行 | 読めないpayloadは飛ばして返す（1件のせいで世帯が読めなくならない） |
 | 上限 | 1回のPOSTは200件まで。本文は1MBまで |
 | 削除 | `DELETE /ops?household=<id>`。opと世帯の行を消す。消した後の最初のアクセスで、空の世帯が作り直される |
+| まとめる | `POST /household/members/merge`。両行の存在を確認し、旧ID→残すIDを対応表に足して旧行だけ消す。履歴のopは書き換えない（対応表で読み替える）。同じID・未知のIDは400 |
+| 外す | `POST /household/members/remove`。名簿の行だけ消し、対応表は残す。未完了の担当チェックは端末側で行う |
 | 作り直し | `POST /household/rotate`。古いトークンで認証し、新しいトークンのハッシュに置き換える。opとcursorはそのまま。短いトークンは400 |
 
 失敗の返し方は `401`（トークン違い）／`400`（形が違う）／`500`。
