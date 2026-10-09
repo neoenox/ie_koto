@@ -4,27 +4,6 @@ import 'package:ie_koto/household_sheet.dart';
 import 'package:ie_koto/sync/setup.dart';
 
 void main() {
-  Future<Object?> openSheet(WidgetTester tester) async {
-    Object? result;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => FilledButton(
-              onPressed: () async {
-                result = await showHouseholdSheet(context, current: null);
-              },
-              child: const Text('接続設定'),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('接続設定'));
-    await tester.pumpAndSettle();
-    return result;
-  }
-
   Future<void> submit(WidgetTester tester, String label) async {
     final button = find.text(label);
     await tester.ensureVisible(button);
