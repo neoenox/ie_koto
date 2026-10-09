@@ -24,27 +24,39 @@ void main() {
     final store = IssueStore();
     final issue = store.add(title: '家族の用事', assigneeId: 'partner');
     store.setAssignee(issue.id, 'partner');
-    store.applyMemberDirectory(const MemberDirectory(
-      members: [
-        Member('mem_11111111111111111111111111111111', '自分'),
-        Member('mem_22222222222222222222222222222222', 'パートナー'),
-        Member('mem_33333333333333333333333333333333', 'あき'),
-      ],
-      aliases: {
-        'me': 'mem_11111111111111111111111111111111',
-        'partner': 'mem_22222222222222222222222222222222',
-      },
-    ));
+    store.applyMemberDirectory(
+      const MemberDirectory(
+        members: [
+          Member('mem_11111111111111111111111111111111', '自分'),
+          Member('mem_22222222222222222222222222222222', 'パートナー'),
+          Member('mem_33333333333333333333333333333333', 'あき'),
+        ],
+        aliases: {
+          'me': 'mem_11111111111111111111111111111111',
+          'partner': 'mem_22222222222222222222222222222222',
+        },
+      ),
+    );
 
-    expect(store.byId(issue.id)!.assigneeId, 'mem_22222222222222222222222222222222');
+    expect(
+      store.byId(issue.id)!.assigneeId,
+      'mem_22222222222222222222222222222222',
+    );
     expect(store.assigneeWord(store.byId(issue.id)!.assigneeId), 'パートナー');
-    expect(store.ops.first.data['assigneeId'], 'partner', reason: '既存ログは書き換えない');
+    expect(
+      store.ops.first.data['assigneeId'],
+      'partner',
+      reason: '既存ログは書き換えない',
+    );
 
     store.setMeId('mem_22222222222222222222222222222222');
     expect(store.assigneeWord(store.byId(issue.id)!.assigneeId), '自分');
     store.setAssignee(issue.id, 'mem_33333333333333333333333333333333');
     expect(store.ops.last.memberId, 'mem_22222222222222222222222222222222');
-    expect(store.ops.last.data['assigneeId'], 'mem_33333333333333333333333333333333');
+    expect(
+      store.ops.last.data['assigneeId'],
+      'mem_33333333333333333333333333333333',
+    );
   });
 
   IssueStore storeAt(DateTime now) => IssueStore(clock: () => now);
@@ -184,7 +196,9 @@ void main() {
     store.complete(c.id);
     expect(store.todayRows.map((i) => i.title), ['A', 'B']);
     expect(store.laterRows.map((i) => i.title), ['C', 'D']);
-    expect(store.todayQueue.map((i) => i.title), ['B'], reason: '完了は「やること」の件数から外れる');
+    expect(store.todayQueue.map((i) => i.title), [
+      'B',
+    ], reason: '完了は「やること」の件数から外れる');
   });
 
   test('取り消せる時間が過ぎた行は、一覧から消える', () {
@@ -232,10 +246,15 @@ void main() {
 
   test('同じ案件の前回・前々回が残る', () {
     final store = IssueStore.demo(clock: () => DateTime(2026, 10, 6, 9));
-    final aircon = store.openIssues.firstWhere((i) => i.title.startsWith('エアコン'));
+    final aircon = store.openIssues.firstWhere(
+      (i) => i.title.startsWith('エアコン'),
+    );
     final history = store.seriesHistory(aircon.seriesKey);
     expect(history, hasLength(2));
-    expect(history.first.completedAt!.isAfter(history.last.completedAt!), isTrue);
+    expect(
+      history.first.completedAt!.isAfter(history.last.completedAt!),
+      isTrue,
+    );
   });
 
   test('履歴の時刻は、追加した時刻より前にならない', () {
@@ -268,7 +287,9 @@ void main() {
     );
     store.complete(issue.id);
 
-    final completion = store.ops.singleWhere((op) => op.kind == OpKind.complete);
+    final completion = store.ops.singleWhere(
+      (op) => op.kind == OpKind.complete,
+    );
     final next = store.openIssues.single;
     expect(next.id, nextIssueId(completion.id), reason: 'どちらの端末が完了しても、同じidになる');
     expect(store.byId(issue.id)!.generatedNextId, nextIssueId(completion.id));
@@ -312,7 +333,10 @@ void main() {
     b.receive(a.ops);
 
     expect(b.all.map((i) => i.id).toSet(), a.all.map((i) => i.id).toSet());
-    expect(b.openIssues.map((i) => i.id).toSet(), a.openIssues.map((i) => i.id).toSet());
+    expect(
+      b.openIssues.map((i) => i.id).toSet(),
+      a.openIssues.map((i) => i.id).toSet(),
+    );
     expect(b.openIssues.single.title, 'お風呂そうじ');
     expect(b.openIssues.single.dueDate, DateTime(2026, 10, 7));
     expect(b.ops.map((op) => op.id).toSet(), a.ops.map((op) => op.id).toSet());
