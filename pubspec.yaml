@@ -20,6 +20,7 @@ dependencies:
 
   # 保存（docs/SYNC_DESIGN.md §9 の手順1）。Android は SharedPreferences、Web は localStorage。
   shared_preferences: ^2.5.5
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   integration_test:
