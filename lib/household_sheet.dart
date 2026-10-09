@@ -49,7 +49,12 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   final _base = TextEditingController();
   final _household = TextEditingController();
   final _token = TextEditingController();
-  String? _error;
+  final _baseFocus = FocusNode();
+  final _householdFocus = FocusNode();
+  final _tokenFocus = FocusNode();
+  String? _baseError;
+  String? _householdError;
+  String? _tokenError;
   late SyncCredentials? _current = widget.current;
   bool _rotatingToken = false;
 
@@ -66,6 +71,9 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     _base.dispose();
     _household.dispose();
     _token.dispose();
+    _baseFocus.dispose();
+    _householdFocus.dispose();
+    _tokenFocus.dispose();
     super.dispose();
   }
 
@@ -123,7 +131,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           selected: _mode != _Mode.join,
           onSelected: (_) => setState(() {
             _mode = _Mode.create;
-            _error = null;
+            _clearErrors();
           }),
         ),
         ChoiceChip(
@@ -131,7 +139,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           selected: _mode == _Mode.join,
           onSelected: (_) => setState(() {
             _mode = _Mode.join;
-            _error = null;
+            _clearErrors();
           }),
         ),
       ],
@@ -345,6 +353,12 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   /// 欄の見出しは上に置く（枠に重ねるフローティング表示は使わない）。
   Widget _caption(String text) => _SheetCaption(text: text);
 
+  void _clearErrors() {
+    _baseError = null;
+    _householdError = null;
+    _tokenError = null;
+  }
+
   Widget _form() {
     final creating = _mode == _Mode.create;
     return Column(
@@ -354,11 +368,16 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         _caption('場所（APIのURL）'),
         TextField(
           controller: _base,
+          focusNode: _baseFocus,
           keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
+          onChanged: (_) {
+            if (_baseError != null) setState(() => _baseError = null);
+          },
+          decoration: InputDecoration(
             hintText: 'https://…',
             isDense: true,
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            errorText: _baseError,
           ),
         ),
         if (!creating) ...[
@@ -366,18 +385,30 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           _caption('世帯id'),
           TextField(
             controller: _household,
-            decoration: const InputDecoration(
+            focusNode: _householdFocus,
+            onChanged: (_) {
+              if (_householdError != null) {
+                setState(() => _householdError = null);
+              }
+            },
+            decoration: InputDecoration(
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              errorText: _householdError,
             ),
           ),
           const SizedBox(height: 10),
           _caption('トークン'),
           TextField(
             controller: _token,
-            decoration: const InputDecoration(
+            focusNode: _tokenFocus,
+            onChanged: (_) {
+              if (_tokenError != null) setState(() => _tokenError = null);
+            },
+            decoration: InputDecoration(
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              errorText: _tokenError,
             ),
           ),
         ] else ...[
@@ -390,13 +421,18 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             ),
           ),
         ],
-        if (_error != null) ...[
+        if (_baseError != null ||
+            _householdError != null ||
+            _tokenError != null) ...[
           const SizedBox(height: 8),
-          Text(
-            _error!,
-            style: TextStyle(
-              fontSize: 12.5,
-              color: Theme.of(context).colorScheme.error,
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              '入力を確認してください',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: Theme.of(context).colorScheme.error,
+              ),
             ),
           ),
         ],
@@ -416,7 +452,8 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   void _create() {
     final baseUrl = HouseholdSetup.normalizeBaseUrl(_base.text);
     if (baseUrl == null) {
-      setState(() => _error = '場所は http(s)://… で入れてください');
+      setState(() => _baseError = '場所は http(s)://… で入れてください');
+      _baseFocus.requestFocus();
       return;
     }
     Navigator.of(context).pop(
@@ -430,18 +467,22 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
 
   void _join() {
     final baseUrl = HouseholdSetup.normalizeBaseUrl(_base.text);
-    if (baseUrl == null) {
-      setState(() => _error = '場所は http(s)://… で入れてください');
-      return;
-    }
     final hError = HouseholdSetup.validateHouseholdId(_household.text);
-    if (hError != null) {
-      setState(() => _error = hError);
-      return;
-    }
     final tError = HouseholdSetup.validateToken(_token.text);
-    if (tError != null) {
-      setState(() => _error = tError);
+    if (baseUrl == null || hError != null || tError != null) {
+      setState(() {
+        _baseError = baseUrl == null ? '場所は http(s)://… で入れてください' : null;
+        _householdError = hError;
+        _tokenError = tError;
+      });
+      // 最初に直す欄へ移動する。
+      if (baseUrl == null) {
+        _baseFocus.requestFocus();
+      } else if (hError != null) {
+        _householdFocus.requestFocus();
+      } else {
+        _tokenFocus.requestFocus();
+      }
       return;
     }
     Navigator.of(context).pop(
