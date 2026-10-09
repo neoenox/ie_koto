@@ -43,7 +43,30 @@ class _DetailPageState extends State<DetailPage> {
       animation: widget.store,
       builder: (context, _) {
         final issue = widget.store.byId(widget.issueId);
-        if (issue == null) return const Scaffold(body: SizedBox.shrink());
+        if (issue == null) {
+          return Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.arrow_back, size: 20),
+                tooltip: 'もどる',
+              ),
+            ),
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('このやることはもうありません'),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: const Text('もどる'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return Scaffold(
           appBar: AppBar(
             elevation: 0,
@@ -296,9 +319,22 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   void _complete(Issue issue) {
-    if (guardWrite(context, () => widget.store.complete(issue.id))) {
-      Navigator.of(context).maybePop();
-    }
+    if (!guardWrite(context, () => widget.store.complete(issue.id))) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('おわったことにしました'),
+          duration: IssueStore.undoWindow,
+          action: SnackBarAction(
+            label: 'もどす',
+            onPressed: () {
+              if (!mounted) return;
+              guardWrite(context, () => widget.store.undoComplete(issue.id));
+            },
+          ),
+        ),
+      );
   }
 
   /// 消すだけは取り消せない（おわったのと違って戻す操作が無い）。1回だけ確かめる。
