@@ -553,8 +553,50 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
       key: ValueKey(id),
       name: name,
       label: '$nameの表示名',
-      onSave: (value) => store.renameMember(id, value),
+      onSave: (value) => _saveMemberName(store, id, value),
     );
+  }
+
+  /// Editing your own display name is immediate. Editing another person's
+  /// shared name requires an explicit confirmation because the change will
+  /// also appear on the other person's device.
+  Future<bool> _saveMemberName(
+    IssueStore store,
+    String memberId,
+    String proposed,
+  ) async {
+    final next = proposed.trim();
+    final current = store.memberById(memberId);
+    if (next.isEmpty || current == null) return false;
+    if (next == current.name) return true;
+    if (store.meId != memberId) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('ほかの人の名前を変えますか？'),
+          content: Text(
+            '「${current.name}」を「$next」に変えると、家族の端末にも表示されます。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('やめる'),
+            ),
+            FilledButton(
+              key: const ValueKey('confirm-other-member-rename'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('名前を変更'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return false;
+      // The member or selected identity could have changed while awaiting
+      // confirmation; never save based on a stale name/target.
+      if (store.memberById(memberId)?.name != current.name) return false;
+    }
+    store.renameMember(memberId, next);
+    return true;
   }
 
   Future<void> _addMember(IssueStore store) async {
@@ -697,7 +739,7 @@ class _MemberNameField extends StatefulWidget {
 
   final String name;
   final String label;
-  final ValueChanged<String> onSave;
+  final Future<bool> Function(String) onSave;
 
   @override
   State<_MemberNameField> createState() => _MemberNameFieldState();
@@ -717,10 +759,26 @@ class _MemberNameFieldState extends State<_MemberNameField> {
     if (!_focus.hasFocus) _save();
   }
 
-  void _save() {
-    widget.onSave(_controller.text);
+  bool _saving = false;
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final proposed = _controller.text.trim();
+    if (proposed == widget.name) return;
     // 空白だけの名前は保存できないので、表示も保存済みの名前に戻す。
-    if (_controller.text.trim().isEmpty) _controller.text = widget.name;
+    if (proposed.isEmpty) {
+      _controller.text = widget.name;
+      return;
+    }
+    _saving = true;
+    try {
+      final saved = await widget.onSave(proposed);
+      if (mounted && !saved) {
+        _controller.text = widget.name;
+      }
+    } finally {
+      _saving = false;
+    }
   }
 
   @override
