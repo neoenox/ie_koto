@@ -156,8 +156,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             const SizedBox(width: 8),
             Expanded(
               child: TextButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(const HouseholdLeave()),
+                onPressed: _confirmLeave,
                 child: const Text('つながりをやめる'),
               ),
             ),
@@ -269,6 +268,30 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         ),
       ],
     );
+  }
+
+  Future<void> _confirmLeave() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('つながりをやめますか？'),
+        content: const Text('この端末の記録は残ります。もう一度つなぐには招待文が必要です。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('やめる'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-leave'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('つながりをやめる'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pop(const HouseholdLeave());
+    }
   }
 
   Future<bool> _confirmDelete() async {
@@ -673,9 +696,10 @@ class _MemberNameFieldState extends State<_MemberNameField> {
       controller: _controller,
       focusNode: _focus,
       maxLength: 80,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
+        labelText: '${widget.name}の表示名',
         isDense: true,
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
         counterText: '',
       ),
       onSubmitted: (_) => _save(),
