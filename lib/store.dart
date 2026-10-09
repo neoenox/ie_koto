@@ -236,6 +236,10 @@ class IssueStore extends ChangeNotifier {
     storage?.saveMemberNames({for (final m in members) m.id: m.name});
     storage?.savePendingMemberNames(pendingMemberNames);
     storage?.saveMeId(meId);
+    storage?.saveMemberAliases(legacyMemberAliases);
+    storage?.saveMemberNames({
+      for (final member in members) member.id: member.name,
+    });
   }
 
   /// 記録の引っ越し用。持っているopをJSON配列で書き出す。
