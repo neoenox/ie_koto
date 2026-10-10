@@ -619,3 +619,64 @@ test('使っていない人を外すと対応表は残る', async () => {
   });
   assert.equal(bad.status, 400);
 });
+
+test('1件共有トークンでは世帯の全件取得・削除・トークン再発行・メンバー変更ができない', async () => {
+  const { env, db } = newEnv();
+  const issueA = op('A', 1, 'add', 'A:1', { title: '共有する' });
+  const issueB = op('B', 1, 'add', 'B:1', { title: '共有しない' });
+  assert.equal((await post(env, [issueA, issueB])).status, 200);
+
+  const share = await call(env, '/household/share', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      household: HOME, issue: 'A:1', member: 'mem_reader',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    }),
+  });
+  assert.equal(share.status, 200);
+  const limitedToken = share.body.token;
+  assert.ok(limitedToken.length >= 32);
+
+  const allowed = await get(env, { token: limitedToken, issue: 'A:1' });
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(allowed.body.ops.map(entry => entry.id), ['A:1']);
+  assert.equal((await get(env, { token: limitedToken })).status, 401);
+  assert.equal((await get(env, { token: limitedToken, issue: 'B:1' })).status, 401);
+
+  const destructive = await call(env, `/ops?household=${HOME}`, {
+    method: 'DELETE', headers: { authorization: `Bearer ${limitedToken}` },
+  });
+  assert.equal(destructive.status, 401);
+  const rotate = await call(env, '/household/rotate', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${limitedToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ household: HOME, token: 'N'.repeat(64) }),
+  });
+  assert.equal(rotate.status, 401);
+  const members = await call(env, `/household/members?household=${HOME}`, {
+    headers: { authorization: `Bearer ${limitedToken}` },
+  });
+  assert.equal(members.status, 401);
+  const mutation = await post(env, [op('C', 1, 'complete', 'B:1')], { token: limitedToken });
+  assert.equal(mutation.status, 403);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM ops WHERE household_id = ?').get(HOME).n, 2);
+  assert.equal((await get(env)).body.ops.length, 2);
+});
+
+test('通信途中のページング再取得は重複せず未取得のopを回収する', async () => {
+  const { env } = newEnv();
+  await post(env, Array.from({ length: 7 }, (_, i) =>
+    op('A', i + 1, 'comment', 'A:1', { text: String(i + 1) })));
+  const initial = await get(env, { limit: 3 });
+  assert.equal(initial.status, 200);
+  assert.equal(initial.body.cursor, 3);
+  // 「受信して保存したがcursor更新前に停止」を再現: 同ページを再受信する。
+  const replay = await get(env, { limit: 3, since: 0 });
+  assert.deepEqual(replay.body.ops, initial.body.ops);
+  // cursorが永続化された時点から残りを順に取得する。
+  const next = await get(env, { limit: 3, since: initial.body.cursor });
+  const last = await get(env, { limit: 3, since: next.body.cursor });
+  assert.deepEqual([...initial.body.ops, ...next.body.ops, ...last.body.ops].map(x => x.id),
+    Array.from({ length: 7 }, (_, i) => `A:${i + 1}`));
+});
