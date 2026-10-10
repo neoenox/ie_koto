@@ -37,9 +37,9 @@ class _DonePageState extends State<DonePage> {
         // years of household tasks and requires no network connection.
         final matches = query.isEmpty
             ? done
-            : done.where(
-                (issue) => issue.title.toLowerCase().contains(query),
-              ).toList();
+            : done
+                  .where((issue) => issue.title.toLowerCase().contains(query))
+                  .toList();
         return Scaffold(
           appBar: AppBar(
             elevation: 0,
@@ -89,7 +89,9 @@ class _DonePageState extends State<DonePage> {
                           'まだおわったものはない',
                           style: TextStyle(
                             fontSize: 13.5,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       )
@@ -124,7 +126,9 @@ class _DonePageState extends State<DonePage> {
                                   : '${timeLabel(at, widget.store.now)}におわった',
                               style: TextStyle(
                                 fontSize: 12.5,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                             ),
                             onTap: () => Navigator.of(context).push(

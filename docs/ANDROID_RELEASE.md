@@ -50,7 +50,7 @@ Remove-Item Env:IE_KOTO_ISOLATED_TEST
 - `flutter build apk --release` のGradleスクリプト評価は成功し、署名設定がないため指定した安全なエラーで停止した。
 - 最新コードでもkey.properties不存在を確認してJDK17で `flutter build appbundle --release --no-pub` を実行。bundleReleaseは「Release signing requires android/key.properties: storeFile, storePassword, keyAlias, keyPassword」でexit 1（約18秒）。期待した負の検証であり、AAB生成成功ではない。鍵の作成・置換、ライセンス承認、配布は行っていない。
 - `flutter build apk --debug` は成功。今回生成されたdebug merged ManifestにINTERNET権限と正しいXML開始部分を確認した。過去のrelease中間生成物は今回のrelease検証の証拠に使わない。
-- 最新の保存・同期入力境界・時計上限の安全停止回帰を含むアプリ全182テスト、静的解析、`git diff --check` は成功。サーバー全23テストも成功（serverのnpm testで全テストファイルを実行）。`flutter pub get --enforce-lockfile` も成功。
+- 最新の保存・同期入力境界・時計上限の安全停止回帰を含むアプリ全240テスト（同期/非同期保存失敗時の最新編集復旧・送信済み位置再試行を含む）、静的解析、`git diff --check` は成功。件数は `flutter test` 最終行の `+N: All tests passed!` とする。サーバー全25テストも成功（serverのnpm testで全テストファイルを実行、`# pass 25`・skip 0）。`flutter pub get --enforce-lockfile` も成功。
 - 実Chrome debugモードで320×568の基本操作・保存からの再生成E2Eが成功。
 - Pixel_6_API_35エミュレーターの通常アプリは上書きせず、別ID `com.neoen.ie_koto.verification` でdebug E2Eを実行し成功。追加・コメント・完了/取り消し・改名・SharedPreferencesからのストア再生成・くりかえし選択を確認した。
 - AndroidのIME表示時に縦overflowを発見し、Widget回帰テストでも修正前の失敗を確認。IME表示時の補助選択肢折りたたみ（選択値は保持）と空状態のスクロール対応で修正後に成功。追加の回帰assertionで担当・明日の期限が折りたたみ中の登録にも残り、IME解除で選択肢が戻ることを確認（小画面2テスト成功、静的解析問題なし）。
