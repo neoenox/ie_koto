@@ -22,11 +22,18 @@
 
 このworkflow単独で公開可と判断しない。画面E2Eは [E2E_TESTING.md](E2E_TESTING.md)、Androidの境界は [ANDROID_RELEASE.md](ANDROID_RELEASE.md) を参照。
 
+## 最新ローカル検証の範囲
+
+- 同期/非同期保存失敗中の追加編集と送信済み位置の保存再試行回帰を含むFlutter全240件・解析・差分チェックが成功（exit 0）。件数は `flutter test` 最終行の `+N: All tests passed!`（test/配下の合計）とする。
+- Web releaseビルドとactionlintは全182件の時点で成功。その成果物は独立Chromeの320×568で追加・reload後の復元・完了を確認済み（[記録](E2E_KNOWN_ISSUES.md)）。以後の変更は保存回帰テストと検証文書。182件は当時の `flutter test` 最終行の値であり、現在の合計ではない。
+- 保存復旧のコメント本文・復元後ID非重複assert強化後、送信済み位置の復旧2件も追加してFlutter全240件→解析→サーバー全25件→差分チェックを同じ連続コマンドで再実行し成功（exit 0、server skip 0）。サーバー件数は `server/npm test` の `# pass N` とする。サーバーの最新成功もこの240件検証回（非同期保存完了待ち中の改名・コメント回帰追加後）である。
+- 実機IME・OS再起動・オフラインreload・正式署名・実2端末HTTPS/D1・ホストCIは未検証。このローカル合格だけで配布しない。
+
 ## GitHub上の運用
 
 まだcommit/pushしていないため、ホストされたrunnerでの成功は未確認。ローカル結果と区別する。
 
-ローカルではFlutter 3.44.0/Node 22.19.0で178テスト（曜日とカスタム日付の拒否時保持・正常保存、完了→保留と複数次回生成のロールバック回帰を含む）、静的解析（問題なし）、差分チェックが成功（時計上限の安全停止・入力保持・取り消し・保存復元後の通知/送信抑制回帰を追加後）。最新の小画面文字2倍＋キーボード回帰と現行ワークスペースの書式/lint更新を含む検証で、Flutter全180件・解析・差分チェックを再確認した（exit 0）。さらに背景編集保持と320px文字2倍の再試行UI回帰を含む全182件・解析・Web releaseビルド・actionlint・差分チェックが連続成功（exit 0）。Webビルド成功は実ブラウザ実行成功ではなく、Wasm関連の警告も合格根拠にしない。同じ検証回でサーバー全23件も再実行し全成功、skip 0（exit 0）。現在のコードで `flutter build web --no-pub` も成功（Wasm dry run成功。ただしWasm版の実行検証ではない）。以前の `flutter pub get --enforce-lockfile` も成功した。Windowsに既存のactionlint 1.7.12があることを確認し、`actionlint .github/workflows/quality.yml` を実行して指摘なし・exit 0を確認。これはローカル静的検証でありUbuntu runnerの実行成功ではない。Ubuntu runnerの実行と必須status checkの設定は未実施。
+ローカルではFlutter 3.44.0/Node 22.19.0で178テスト（曜日とカスタム日付の拒否時保持・正常保存、完了→保留と複数次回生成のロールバック回帰を含む）、静的解析（問題なし）、差分チェックが成功（時計上限の安全停止・入力保持・取り消し・保存復元後の通知/送信抑制回帰を追加後）。最新の小画面文字2倍＋キーボード回帰と現行ワークスペースの書式/lint更新を含む検証で、Flutter全180件・解析・差分チェックを再確認した（exit 0）。さらに背景編集保持と320px文字2倍の再試行UI回帰を含む全182件・解析・Web releaseビルド・actionlint・差分チェックが連続成功（exit 0）。Webビルド成功は実ブラウザ実行成功ではなく、Wasm関連の警告も合格根拠にしない。サーバー全23件は180件の検証回で再実行し全成功、skip 0（exit 0）。現在のコードで `flutter build web --no-pub` も成功（Wasm dry run成功。ただしWasm版の実行検証ではない）。以前の `flutter pub get --enforce-lockfile` も成功した。Windowsに既存のactionlint 1.7.12があることを確認し、`actionlint .github/workflows/quality.yml` を実行して指摘なし・exit 0を確認。これはローカル静的検証でありUbuntu runnerの実行成功ではない。Ubuntu runnerの実行と必須status checkの設定は未実施。
 
 WindowsのChrome runnerではFlutter SDKのCanvasKitルートに区切り文字不一致があり、通常実行がsuite読込みで停止した。診断用CDPでSDK既存CanvasKitの2ファイルだけを配信した条件ではwire全11件成功。保存テストは11件成功・1件がdart:ioのテスト補助HTTPサーバー非対応で失敗（exit 1）。通常runnerやブラウザ保存E2Eの成功とは扱わず、詳細と制約は [SYNC_INPUT_LIMITS.md](SYNC_INPUT_LIMITS.md) を参照。
 
