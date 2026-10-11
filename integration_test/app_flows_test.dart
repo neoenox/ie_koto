@@ -79,16 +79,30 @@ void main() {
       of: find.byKey(ValueKey(id)),
       matching: find.byType(TextField),
     );
-    final first = nameField(store.members[0].id);
-    final second = nameField(store.members[1].id);
-    await tester.ensureVisible(first);
-    await tester.enterText(first, 'あき');
-    await tester.ensureVisible(second);
-    await tester.tap(second);
-    await tester.pumpAndSettle();
-    await tester.enterText(second, 'はる');
+    // 自分の名前は入力欄で変えられる。
+    final selfField = nameField(store.meId);
+    await tester.ensureVisible(selfField);
+    await tester.enterText(selfField, 'あき');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
+    // 他人の行に入力欄はなく、まとめる/はずすだけ（名簿本人性規則）。
+    expect(nameField(store.members[1].id), findsNothing);
+    expect(find.text('まとめる'), findsWidgets);
+    // 「はる」は人を追加で足す。
+    await tester.tap(find.text('人を追加'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      'はる',
+    );
+    // 実IME表示中はボタンが隠れるため、確定アクションで登録する。
+    // （ボタンの到達はwidgetテストで検証）
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(store.members.map((m) => m.name), containsAll(['あき', 'はる']));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     final reopened = IssueStore(
