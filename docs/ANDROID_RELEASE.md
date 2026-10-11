@@ -35,16 +35,28 @@ Windowsのパスは `/` を使うとPropertiesのバックスラッシュエス�
 Play App Signingでは、配布署名とアップロード署名が別になる。照合するのは **アップロード証明書**（Play Console → 設定 → アプリの署名 → アップロード証明書のSHA-256）である。
 
 ```powershell
-# 1. AABの署名を確認（署名者と証明書を表示）
+# 1. AABの署名を確認（AABはJAR署名のためjarsignerを使う。APKには使わない）
 jarsigner -verify -verbose -certs build/app/outputs/bundle/release/app-release.aab
 
-# 2. AAB内証明書のSHA-256指紋を取り出す（apksigner.batが直接動かない環境ではjava -jar形を使う）
-java -jar C:/Android/sdk/build-tools/36.0.0/lib/apksigner.jar verify --print-certs `
-  build/app/outputs/bundle/release/app-release.aab |
-  Select-String 'SHA-256'
+# 2. 手元のアップロード鍵のSHA-256指紋を取り出す（合言葉は画面に入力し、ログに残さない）
+keytool -list -v -keystore C:/private/path/upload-keystore.jks -alias <existing-upload-key-alias> |
+  Select-String 'SHA256'
 
 # 3. 手順2の指紋とPlay Consoleのアップロード証明書のSHA-256が一致することを確認する
 ```
+
+APKを確認するときは `apksigner` を使う（`apksigner` はAPK専用、AABには使わない。
+`apksigner.bat` が直接動かない環境では `java -jar` 形を使う。debug APKで動作確認済み）。
+
+```powershell
+java -jar C:/Android/sdk/build-tools/36.0.0/lib/apksigner.jar verify --print-certs `
+  build/app/outputs/flutter-apk/app-release.apk |
+  Select-String 'SHA-256'
+```
+
+注意：`keytool -printcert -jarfile` はv1（JAR）署名のない成果物に使えない。
+debug APKのようにv2以降のみで署名されたものは「JARファイルではありません」と失敗する。
+上記の使い分け（AAB→jarsigner／鍵→keytool -list／APK→apksigner）を守ること。
 
 指紋が一致しない場合は配布を止め、鍵の取り違えを疑う。正しい鍵でも `key.properties` の値（パス・別名・合言葉）はIssue・チャット・CIログに貼らない。
 
