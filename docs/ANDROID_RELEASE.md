@@ -28,7 +28,25 @@ Windowsのパスは `/` を使うとPropertiesのバックスラッシュエス�
 4. `flutter build appbundle --release` を実行する。
 5. 署名を `jarsigner -verify -verbose -certs <aab>` 等で確認する。署名証明書の指紋を配布先のアップロード証明書と照合する。署名があるだけでは適切な配布鍵である証明にはならない。
 6. merged ManifestにINTERNET権限があり、不正なテキストがないことを確認する。
-7. 内部テストに配布してインストールする。HTTPS同期・保存・終了復帰は実機で別途確認する（#60）。
+7. 内部テストに配布してインストールする。HTTPS同期・保存・終了復帰は実機で別途確認する（#60）.
+
+## 署名の照合手順（Play App Signing利用時）
+
+Play App Signingでは、配布署名とアップロード署名が別になる。照合するのは **アップロード証明書**（Play Console → 設定 → アプリの署名 → アップロード証明書のSHA-256）である。
+
+```powershell
+# 1. AABの署名を確認（署名者と証明書を表示）
+jarsigner -verify -verbose -certs build/app/outputs/bundle/release/app-release.aab
+
+# 2. AAB内証明書のSHA-256指紋を取り出す（apksigner.batが直接動かない環境ではjava -jar形を使う）
+java -jar C:/Android/sdk/build-tools/36.0.0/lib/apksigner.jar verify --print-certs `
+  build/app/outputs/bundle/release/app-release.aab |
+  Select-String 'SHA-256'
+
+# 3. 手順2の指紋とPlay Consoleのアップロード証明書のSHA-256が一致することを確認する
+```
+
+指紋が一致しない場合は配布を止め、鍵の取り違えを疑う。正しい鍵でも `key.properties` の値（パス・別名・合言葉）はIssue・チャット・CIログに貼らない。
 
 ## 通常アプリを保護するAndroid debug検証
 
