@@ -52,6 +52,17 @@ void main() {
     expect(store.byId(store.all.single.id)!.isDone, isFalse);
   });
 
+  testWidgets('#108 詳細の完了ボタンは主操作としてFilledで出す', (tester) async {
+    await pumpWithIssue(tester, '終わらせる依頼');
+    await openDetail(tester, '終わらせる依頼');
+
+    // 一覧の小さな完了と逆転しないよう、詳細の主操作はFilledに保つ。
+    expect(find.widgetWithText(FilledButton, 'おわったことにする'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('detail-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('おわったことにしました'), findsOneWidget);
+  });
+
   testWidgets('#80 つながりをやめるは確認を挟む', (tester) async {
     Object? result;
     await tester.pumpWidget(

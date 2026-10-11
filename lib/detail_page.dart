@@ -132,7 +132,7 @@ class _DetailPageState extends State<DetailPage> {
               if (!issue.recurrence.isNone) _seriesHistoryLinks(issue),
               const SizedBox(height: 10),
               if (!issue.isDone) ...[
-                OutlinedButton.icon(
+                FilledButton.icon(
                   key: const ValueKey('detail-done'),
                   onPressed: () => _complete(issue),
                   icon: const Icon(Icons.check, size: 20),
