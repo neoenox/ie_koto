@@ -161,7 +161,15 @@ void main() {
     await show(b);
     await tester.tap(find.byKey(const ValueKey('household-open')));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextField, 'あき'), findsOneWidget);
+    // 別端末の改名は共有されるが、他人は変えられず解消だけできる。
+    expect(find.text('あき'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey(meA)),
+        matching: find.byType(TextField),
+      ),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   }, timeout: const Timeout(Duration(minutes: 3)));
 }
