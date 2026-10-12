@@ -60,6 +60,36 @@ debug APKのようにv2以降のみで署名されたものは「JARファイル
 
 指紋が一致しない場合は配布を止め、鍵の取り違えを疑う。正しい鍵でも `key.properties` の値（パス・別名・合言葉）はIssue・チャット・CIログに貼らない。
 
+## 鍵の保全と復元（所有者作業）
+
+JKS・パスワード・`key.properties` を変更・移動・削除しない。以下は所有者が暗号化した別媒体で実施する。
+
+1. `~/.android/release-keys/ie-koto-upload.jks` を別媒体へ複写する。
+2. パスワード（`ie-koto-passwords.txt` の内容）をパスワード管理へ移し、平文ファイルの扱いを決める（残す場合は権限制限を維持）。
+3. 復元検証：別媒体から一時フォルダへ戻し、`keytool -list -keystore <戻したJKS> -alias upload` で読めることと、SHA-256が記録の指紋と一致することを確認する。確認後は一時ファイルを消す。
+4. Git・OneDriveの通常同期・チャット・CIログに鍵・パスワードを置かない。`android/.gitignore` が `key.properties` と `**/*.jks` を除外していることを `git check-ignore -v` で確認する。
+
+バックアップの完了確認までは #59 を閉じない。
+
+## ビルド陳腐化の記録（暫定回避策）
+
+`integration_test` を実行した後の作業ツリーでは、生成済み `GeneratedPluginRegistrant.java` が
+`dev.flutter.plugins.integration_test` を参照したまま残り、`bundleRelease` のjavacが
+`package does not exist` で失敗することがある（debugビルドでは顕在化しない場合がある）。
+
+- 暫定回避策：`flutter clean` のあと `--no-pub` を付けずに `flutter build appbundle --release` を実行する（依存再解決で登録が作り直される）。2026-10-12にこの手順で復旧し、署名AAB生成に成功した。
+- 恒久対策：未定。Flutter toolの再生成条件の調査は残務とする（RESIDUAL RISK）。
+
+## Play Console登録の準備（未登録）
+
+現状：`com.neoen.ie_koto` はPlay Console未登録。登録・アップロード・公開は所有者の承認後に行う。
+
+- applicationId: `com.neoen.ie_koto`（維持、無断変更しない）
+- versionName `0.1.0`／versionCode `1`（初回。更新時はビルド番号を再利用しない）
+- compileSdk 36／minSdk 24／targetSdk 36（Flutter 3.44.0の既定）
+- 照合対象は **アップロード証明書** のSHA-256（Play Console → 設定 → アプリの署名）。配信用のアプリ署名証明書（Google管理）とは別物であり、取り違えないこと。
+- 新規登録時はPlay App Signingを有効にし、アップロード鍵として今回作成の鍵を使う。
+
 ## 通常アプリを保護するAndroid debug検証
 
 既存エミュレーターには利用データがある可能性があるため、通常のapplicationIdへのテスト上書きを避ける。検証用PowerShellでのみ以下を実行する。
