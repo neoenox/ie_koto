@@ -77,8 +77,9 @@ JKS・パスワード・`key.properties` を変更・移動・削除しない。
 `dev.flutter.plugins.integration_test` を参照したまま残り、`bundleRelease` のjavacが
 `package does not exist` で失敗することがある（debugビルドでは顕在化しない場合がある）。
 
-- 暫定回避策：`flutter clean` のあと `--no-pub` を付けずに `flutter build appbundle --release` を実行する（依存再解決で登録が作り直される）。2026-10-12にこの手順で復旧し、署名AAB生成に成功した。
-- 恒久対策：未定。Flutter toolの再生成条件の調査は残務とする（RESIDUAL RISK）。
+- 暫定回避策：`flutter clean` のあと `--no-pub` を付けずに `flutter build appbundle --release` を実行する（依存再解決で登録が作り直される）。2026-10-12にこの手順で復旧し、署名AAB生成に成功した。クリーン再ビルドはバイト同一（SHA-256一致）の成果物を再現した。
+- 追加検証（2026-10-12）：E2E実行直後に `flutter build apk --debug --no-pub` を行っても再現しなかった。増分Gradle状態に依存する散発事象と判断し、原因の断定はしない。
+- CIにはAndroidビルド工程がなく、releaseコンパイルにはローカルの署名鍵が要るため、CIでの再発検出は組み込まない。release手順として「クリーン＋依存再解決つきビルド」を必須とする（RESIDUAL RISK）。
 
 ## Play Console登録の準備（未登録）
 
