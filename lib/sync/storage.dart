@@ -453,33 +453,39 @@ class DeviceStorage extends ChangeNotifier implements Storage {
     _cachedFingerprint = null;
   }
 
+  /// 未確定の書き込みは永続化先より新しいので、読込みでは常に優先する。
+  /// 値が null の場合も削除予定として扱い、古い値を復活させない。
+  String? _readForLoad(String key) => _unconfirmed.containsKey(key)
+      ? _unconfirmed[key]
+      : _store.read(key);
+
   /// 中身が変わったかどうかを、安い読み取りだけで見分けるための目印。
   String _fingerprint() {
-    final chunks = _store.read(chunksKey) ?? '';
+    final chunks = _readForLoad(chunksKey) ?? '';
     final last = (int.tryParse(chunks) ?? 0) - 1;
     return <String>[
       chunks,
-      if (last >= 0) _store.read(chunkKey(last)) ?? '',
-      _store.read(deviceKey) ?? '',
-      _store.read(pushedKey) ?? '',
-      _store.read(relayKey) ?? '',
-      _store.read(syncKey) ?? '',
-      _store.read(meKey) ?? '',
-      _store.read(meExplicitKey) ?? '',
-      _store.read(membersKey) ?? '',
-      _store.read(aliasesKey) ?? '',
-      _store.read(pendingMembersKey) ?? '',
-      _store.read(pendingMemberAliasesKey) ?? '',
-      _store.read(pendingMemberRemovalsKey) ?? '',
+      if (last >= 0) _readForLoad(chunkKey(last)) ?? '',
+      _readForLoad(deviceKey) ?? '',
+      _readForLoad(pushedKey) ?? '',
+      _readForLoad(relayKey) ?? '',
+      _readForLoad(syncKey) ?? '',
+      _readForLoad(meKey) ?? '',
+      _readForLoad(meExplicitKey) ?? '',
+      _readForLoad(membersKey) ?? '',
+      _readForLoad(aliasesKey) ?? '',
+      _readForLoad(pendingMembersKey) ?? '',
+      _readForLoad(pendingMemberAliasesKey) ?? '',
+      _readForLoad(pendingMemberRemovalsKey) ?? '',
     ].join('|');
   }
 
   SavedState _read() {
-    final chunks = int.tryParse(_store.read(chunksKey) ?? '') ?? 0;
+    final chunks = int.tryParse(_readForLoad(chunksKey) ?? '') ?? 0;
     final raw = <Object?>[];
     var tail = <String>[];
     for (var index = 0; index < chunks; index++) {
-      final lines = _lines(_store.read(chunkKey(index)));
+      final lines = _lines(_readForLoad(chunkKey(index)));
       if (index == chunks - 1) tail = lines;
       for (final line in lines) {
         try {
@@ -495,14 +501,14 @@ class DeviceStorage extends ChangeNotifier implements Storage {
     _tail = tail;
 
     return SavedState(
-      deviceId: _store.read(deviceKey) ?? '',
+      deviceId: _readForLoad(deviceKey) ?? '',
       ops: decoded.ops,
-      pushedThrough: int.tryParse(_store.read(pushedKey) ?? '') ?? 0,
+      pushedThrough: int.tryParse(_readForLoad(pushedKey) ?? '') ?? 0,
       pendingRelayIds: _readRelayIds(),
       sync: _readSync(),
       skippedOps: decoded.skipped,
-      meId: _store.read(meKey) ?? '',
-      meExplicit: _store.read(meExplicitKey) == 'true',
+      meId: _readForLoad(meKey) ?? '',
+      meExplicit: _readForLoad(meExplicitKey) == 'true',
       memberNames: _readMemberNames(),
       memberAliases: _readStringMap(aliasesKey),
       pendingMemberNames: _readStringMap(pendingMembersKey),
@@ -522,7 +528,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
 
   Set<String> _readStringSet(String key) {
     try {
-      final raw = jsonDecode(_store.read(key) ?? '[]');
+      final raw = jsonDecode(_readForLoad(key) ?? '[]');
       if (raw is! List) return <String>{};
       return raw.whereType<String>().where((id) => id.isNotEmpty).toSet();
     } catch (_) {
@@ -531,7 +537,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
   }
 
   SyncCredentials? _readSync() {
-    final raw = _store.read(syncKey);
+    final raw = _readForLoad(syncKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       return SyncCredentials.fromJson(jsonDecode(raw));
@@ -545,7 +551,7 @@ class DeviceStorage extends ChangeNotifier implements Storage {
   }
 
   Map<String, String> _readStringMap(String key) {
-    final raw = _store.read(key);
+    final raw = _readForLoad(key);
     if (raw == null || raw.isEmpty) return const <String, String>{};
     try {
       final decoded = jsonDecode(raw);
