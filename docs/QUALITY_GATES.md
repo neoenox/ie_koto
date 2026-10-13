@@ -11,7 +11,9 @@
 5. 通常Webビルド
 6. 差分の空白チェック
 
-本番資格情報は不要。デプロイ、DB変更、署名、Playアップロードは行わない。サーバーにnpm依存がないため、npm install/npm ciは不要。Web生成物はテスト用で、公開成果物ではない。
+`release-compile` ジョブ（#126で追加）は `checks` とは別に走り、CI実行時だけ有効な一時鍵（`$RUNNER_TEMP` 内、乱数合言葉、ログ出力なし）で `flutter build appbundle --release` を行い、`jarsigner` で一時鍵の署名（`CN=ci-temp`）とAndroid Debug署名が無いことを確認してから鍵材料を破棄する。本番の署名鍵には触れない。
+
+本番資格情報は不要。デプロイ、DB変更、本番署名、Playアップロードは行わない。サーバーにnpm依存がないため、npm install/npm ciは不要。Web生成物はテスト用で、公開成果物ではない。
 
 ## まだ自動化していない範囲
 
@@ -31,15 +33,17 @@
 
 ## GitHub上の運用
 
-まだcommit/pushしていないため、ホストされたrunnerでの成功は未確認。ローカル結果と区別する。
+ホストされたrunner（GitHub Actions）での成功を確認済み。PR #118〜#126 の各PRで Quality / Validation の両方が success。統合後のmain `bbf457e` でも Quality（`checks`＋新規 `release-compile`、run 38396528065）と Validation（run 38395889069）が success。
 
-ローカルではFlutter 3.44.0/Node 22.19.0で178テスト（曜日とカスタム日付の拒否時保持・正常保存、完了→保留と複数次回生成のロールバック回帰を含む）、静的解析（問題なし）、差分チェックが成功（時計上限の安全停止・入力保持・取り消し・保存復元後の通知/送信抑制回帰を追加後）。最新の小画面文字2倍＋キーボード回帰と現行ワークスペースの書式/lint更新を含む検証で、Flutter全180件・解析・差分チェックを再確認した（exit 0）。さらに背景編集保持と320px文字2倍の再試行UI回帰を含む全182件・解析・Web releaseビルド・actionlint・差分チェックが連続成功（exit 0）。Webビルド成功は実ブラウザ実行成功ではなく、Wasm関連の警告も合格根拠にしない。サーバー全23件は180件の検証回で再実行し全成功、skip 0（exit 0）。現在のコードで `flutter build web --no-pub` も成功（Wasm dry run成功。ただしWasm版の実行検証ではない）。以前の `flutter pub get --enforce-lockfile` も成功した。Windowsに既存のactionlint 1.7.12があることを確認し、`actionlint .github/workflows/quality.yml` を実行して指摘なし・exit 0を確認。これはローカル静的検証でありUbuntu runnerの実行成功ではない。Ubuntu runnerの実行と必須status checkの設定は未実施。
+同じrefへ連続pushすると、`concurrency` の `cancel-in-progress` により先行runが cancelled になる（commitの作成順とrunの作成順は一致しない）。tipの結果が cancelled のまま残った場合は `gh workflow run quality.yml --ref main` で取り直し、そのrunの `headSha` がtipと一致することを確認してから合格根拠にする。
+
+ローカルではFlutter 3.44.0/Node 22.19.0で178テスト（曜日とカスタム日付の拒否時保持・正常保存、完了→保留と複数次回生成のロールバック回帰を含む）、静的解析（問題なし）、差分チェックが成功（時計上限の安全停止・入力保持・取り消し・保存復元後の通知/送信抑制回帰を追加後）。最新の小画面文字2倍＋キーボード回帰と現行ワークスペースの書式/lint更新を含む検証で、Flutter全180件・解析・差分チェックを再確認した（exit 0）。さらに背景編集保持と320px文字2倍の再試行UI回帰を含む全182件・解析・Web releaseビルド・actionlint・差分チェックが連続成功（exit 0）。Webビルド成功は実ブラウザ実行成功ではなく、Wasm関連の警告も合格根拠にしない。サーバー全23件は180件の検証回で再実行し全成功、skip 0（exit 0）。現在のコードで `flutter build web --no-pub` も成功（Wasm dry run成功。ただしWasm版の実行検証ではない）。以前の `flutter pub get --enforce-lockfile` も成功した。Windowsに既存のactionlint 1.7.12があることを確認し、`actionlint .github/workflows/quality.yml` を実行して指摘なし・exit 0を確認。これはローカル静的検証であり、Ubuntu runnerの成功根拠には使わない（runnerの成功は上記の別runで確認した）。必須status checkの設定は未実施。
 
 WindowsのChrome runnerではFlutter SDKのCanvasKitルートに区切り文字不一致があり、通常実行がsuite読込みで停止した。診断用CDPでSDK既存CanvasKitの2ファイルだけを配信した条件ではwire全11件成功。保存テストは11件成功・1件がdart:ioのテスト補助HTTPサーバー非対応で失敗（exit 1）。通常runnerやブラウザ保存E2Eの成功とは扱わず、詳細と制約は [SYNC_INPUT_LIMITS.md](SYNC_INPUT_LIMITS.md) を参照。
 
 全テスト再実行で自動送信テストの競合を検出した。サーバー受信の観測だけではクライアントのHTTP応答処理が終わっていないため、受信とoutboxの空状態の両方を待つようテストを修正した（製品コード変更なし）。修正後に153テスト・解析・差分チェックが再び成功。
 
-リポジトリ管理者はマージ先ブランチに `checks` の必須status checkとレビューを設定し、最初のPRでrunner実行を確認する。workflow追加だけではマージは禁止されない。ブランチ保護は今回変更していない。
+リポジトリ管理者はマージ先ブランチに `checks`・`release-compile` の必須status checkとレビューを設定することが望ましい。workflow追加だけではマージは禁止されない。runnerの実行自体は上記のとおり確認済みだが、`main` は現在もブランチ保護が無く、必須status checkは未設定。
 
 ## 実ブラウザ保存の限定検証
 
