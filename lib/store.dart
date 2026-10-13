@@ -149,6 +149,10 @@ class IssueStore extends ChangeNotifier {
     return normalized == '自分' || normalized == 'パートナー';
   }
 
+  /// 世帯で共有する表示名の上限。サーバー（`server/src/index.js`）と同じ80文字。
+  /// ここで弾かないと、サーバーが400で拒否して操作opの同期まで止まる（#128）。
+  static const int maxMemberNameLength = 80;
+
   Future<void> Function(Member member)? onMemberWrite;
 
   /// この端末を使う人を変える。端末に残る（同期しない）。
@@ -168,7 +172,7 @@ class IssueStore extends ChangeNotifier {
   }
 
   /// 自分の表示名だけ変えられる。他人の名前は変えられない。
-  /// 空・予約名（自分／パートナー）も変えられない。変えたら true。
+  /// 空・予約名（自分／パートナー）・81文字以上も変えられない。変えたら true。
   bool renameMember(String id, String name) {
     id = canonicalMemberId(id);
     if (id != canonicalMemberId(meId)) return false;
@@ -177,6 +181,7 @@ class IssueStore extends ChangeNotifier {
     final index = members.indexWhere((m) => m.id == id);
     if (index < 0) return false;
     if (members[index].name == trimmed) return true;
+    if (trimmed.length > maxMemberNameLength) return false;
     members[index] = Member(id, trimmed);
     storage?.saveMemberNames({for (final m in members) m.id: m.name});
     _markMemberPending(members[index]);
@@ -191,6 +196,9 @@ class IssueStore extends ChangeNotifier {
     }
     if (isReservedMemberName(trimmed)) {
       throw ArgumentError.value(name, 'name', '「自分」「パートナー」は使えません。なまえ等を入れてください');
+    }
+    if (trimmed.length > maxMemberNameLength) {
+      throw ArgumentError.value(name, 'name', '80字以内で入力してください');
     }
     final member = Member('mem_${Device.newId()}', trimmed);
     members.add(member);

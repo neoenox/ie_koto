@@ -194,6 +194,11 @@ class SyncSession extends ChangeNotifier {
           for (final entry in Map<String, String>.of(
             store.pendingMemberNames,
           ).entries) {
+            // サーバーが400で拒否する長い名前は送らず保留のまま残し、
+            // 操作opの送受信を止めない（#128）。直す手段は外す・作り直し。
+            if (entry.value.trim().length > IssueStore.maxMemberNameLength) {
+              continue;
+            }
             await api.saveMember(Member(entry.key, entry.value));
             _checkOpen();
             if (store.pendingMemberNames[entry.key] == entry.value) {
