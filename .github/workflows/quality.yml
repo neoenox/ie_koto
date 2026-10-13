@@ -40,3 +40,48 @@ jobs:
         run: flutter build web
       - name: Check whitespace
         run: git diff --check
+
+  # Releaseコンパイルの回帰検出。署名にはCI実行時だけ有効な一時鍵を使い、
+  # 本番鍵には一切触れない。鍵・合言葉はログに出さない。
+  release-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Accept Android licenses
+        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Build signed release AAB with ephemeral key
+        env:
+          CI_KEY_DIR: ${{ runner.temp }}/ci-keys
+        run: |
+          set -eu
+          mkdir -p "$CI_KEY_DIR"
+          CI_PASS="$(openssl rand -hex 32)"
+          keytool -genkeypair -keystore "$CI_KEY_DIR/ci.jks" -storetype JKS \
+            -alias temp -keyalg RSA -keysize 2048 -validity 30 \
+            -dname 'CN=ci-temp' -storepass "$CI_PASS" -keypass "$CI_PASS"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=temp\nkeyPassword=%s\n' \
+            "$CI_KEY_DIR/ci.jks" "$CI_PASS" "$CI_PASS" > android/key.properties
+          unset CI_PASS
+          flutter build appbundle --release
+      - name: Verify release signature is the ephemeral key
+        run: |
+          set -eu
+          jarsigner -verify build/app/outputs/bundle/release/app-release.aab
+          jarsigner -verify -verbose -certs build/app/outputs/bundle/release/app-release.aab > "$RUNNER_TEMP/verify.txt"
+          grep -q 'CN=ci-temp' "$RUNNER_TEMP/verify.txt"
+          test "$(grep -c 'Android Debug' "$RUNNER_TEMP/verify.txt")" = "0"
+      - name: Discard ephemeral key material
+        if: always()
+        run: |
+          rm -rf "${{ runner.temp }}/ci-keys" android/key.properties
+          git status --short
