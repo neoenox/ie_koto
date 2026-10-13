@@ -58,7 +58,7 @@ jobs:
           channel: stable
           cache: true
       - name: Accept Android licenses
-        run: yes | sdkmanager --licenses > /dev/null
+        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
       - name: Build signed release AAB with ephemeral key
         env:
           CI_KEY_DIR: ${{ runner.temp }}/ci-keys
