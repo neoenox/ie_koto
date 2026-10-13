@@ -781,32 +781,49 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             Navigator.of(ctx).pop(controller.text);
           }
 
-          return AlertDialog(
-            title: const Text('人を追加'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SheetCaption(text: '名前'),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  maxLength: 80,
-                  decoration: InputDecoration(
-                    hintText: '例：あき',
-                    errorText: error,
+          // 小画面＋キーボード表示でも縦にはみ出さないよう、全体をスクロール化する。
+          return Dialog(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('人を追加'),
+                  const SizedBox(height: 12),
+                  const _SheetCaption(text: '名前'),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: 80,
+                    decoration: InputDecoration(
+                      hintText: '例：あき',
+                      errorText: error,
+                      // 80文字制限は残し、カウンタ行を出さない（小画面対応）。
+                      counterText: '',
+                    ),
+                    onSubmitted: (_) => submit(),
                   ),
-                  onSubmitted: (_) => submit(),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('やめる'),
+                  const SizedBox(height: 12),
+                  // 狭い画面では右にはみ出さず折り返す。
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('やめる'),
+                      ),
+                      FilledButton(
+                        onPressed: submit,
+                        child: const Text('この名前で入れる'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              FilledButton(onPressed: submit, child: const Text('この名前で入れる')),
-            ],
+            ),
           );
         },
       ),

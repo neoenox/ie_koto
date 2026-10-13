@@ -84,4 +84,29 @@ void main() {
       expect(tester.takeException(), isNull, reason: '世帯設定');
     });
   }
+  testWidgets('320px・キーボード表示でも人を追加できる', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = IssueStore();
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('household-open')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('人を追加'));
+    await tester.pumpAndSettle();
+    // 実機のIME表示を模し、ダイアログが縦にはみ出さないこと。
+    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: '追加ダイアログ表示');
+    await tester.enterText(find.byType(TextField).last, 'はる');
+    final register = find.widgetWithText(FilledButton, 'この名前で入れる');
+    // 狭い画面ではダイアログ内をスクロールしてボタンへ届く。
+    await tester.ensureVisible(register);
+    await tester.pumpAndSettle();
+    await tester.tap(register);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: '追加登録');
+    expect(store.members.map((m) => m.name), contains('はる'));
+  });
 }
