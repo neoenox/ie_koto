@@ -78,7 +78,10 @@ class SyncSession extends ChangeNotifier {
 
   bool get isSyncing => _inFlight != null;
   bool get hasPendingChanges =>
-      store.outbox.isNotEmpty || store.pendingMemberNames.isNotEmpty;
+      store.outbox.isNotEmpty ||
+      store.pendingMemberNames.isNotEmpty ||
+      store.pendingMemberAliases.isNotEmpty ||
+      store.pendingMemberRemovals.isNotEmpty;
 
   /// 前面だけで10秒ごとに差分同期。失敗しても次の回で再試行する。
   void startForegroundSync({Future<void> Function()? onSync}) {
