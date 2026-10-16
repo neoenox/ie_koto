@@ -37,6 +37,7 @@
 - 2026-10-16: 復旧（#65）として [RECOVERY.md](RECOVERY.md) を追加（端末移行の復旧範囲、D1のバックアップ/復元、保持方針、アクセス管理、復旧後の cursor・重複・整合性、RPO/RTO、利用者/運用者の手順）。`server/test/backup_restore.test.mjs` で全行ダンプ→別DBへの復元を実証（cursor の続き・二重送信防止・壊れた行の飛ばし・削除後のバックアップ）。[PRIVACY.md](PRIVACY.md) にバックアップ保持の扱いを追記して整合。サーバー `npm test` は全31件成功（exit 0、skip 0）。Flutter側のコード変更はなし。
 - 2026-10-16: 認可・秘密情報（#67）として [SECURITY.md](SECURITY.md) を追加（認可モデル、検証結果の対応表、秘密値の露出経路の棚卸し、本番構成の要件、残存リスク）。`server/test/security.test.mjs` で穴を補完（別世帯の管理操作の拒否・削除後の再作成の実挙動・入力の形とサイズ上限・平文の秘密がDBに無い・期限の境界・CORSの反射）。サーバー `npm test` は全37件成功（exit 0、skip 0）。Flutter側のコード変更はなし。
 - 2026-10-16: ストア掲載（#69）として表示名を `いえこと` に統一し、配布用アイコン（適応型・ラウンド・Web）とフィーチャーグラフィックを用意、Webメタデータ（`index.html`/`manifest.json`）を更新。エミュレーター実画面のスクリーンショット4枚を 2:1 以内に整えて [STORE_LISTING.md](STORE_LISTING.md) に掲載文・データ申告・初回起動デモの公開仕様を記録。`flutter build apk --debug` でリソース妥当性を確認（debug APKはGitに含めない）。掲載文の入力、AABの内部テスト配布、実機release同期は所有者承認後（#60）。
+- 2026-10-16: 初回利用・日本語入力・文字拡大・読み上げ・コントラスト（#70）として、IMEの確定/Enter（二重送信なし・変換中は未登録）と追加ボタン連打を [test/ime_submit_test.dart](../test/ime_submit_test.dart) に3件、実テーマの色からWCAG AAコントラスト（本文16.4:1／説明文8.9:1／エラー6.2:1／強調6.2:1／通知7.2:1／選択チップ5.2:1）を [test/contrast_test.dart](../test/contrast_test.dart) に1件追加。結果と人の手で残す範囲を [VERIFICATION.md](VERIFICATION.md) の #70 節に記録。`flutter analyze` 問題なし、`flutter test --concurrency=1` は43ファイル／262件成功（exit 0）。Flutter側の製品コード変更はなし。
 
 ## GitHub上の運用
 
