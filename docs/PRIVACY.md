@@ -2,9 +2,9 @@
 
 公開用の説明文。端末（[lib/](../lib/)）とサーバー（[server/](../server/)）の実装と照合して書いている。
 
-- 公開URL（暫定）: https://github.com/neoenox/ie_koto/blob/main/docs/PRIVACY.md
-- 問い合わせ先（暫定）: https://github.com/neoenox/ie_koto/issues
-- 上記2つは所有者が確定する。メール等へ差し替える場合も、Google Play のデータ申告と一致させる。
+- 公開URL: https://github.com/neoenox/ie_koto/blob/main/docs/PRIVACY.md
+- 問い合わせ先: https://github.com/neoenox/ie_koto/issues
+- 本番サイト（#62）ができたら、同じ内容を本番ドメインへ移してURLを差し替える。ストア（Google Play）のデータ申告は下の「Google Play のデータ申告との対応」に合わせる。
 
 ## 何を、なぜ、どこに保存するか
 
@@ -62,8 +62,8 @@
 - 削除: 世帯の削除・端末データの消去で可能。
 - 販売・広告目的の共有: なし。
 
-## 未確定（所有者が決める）
+## 決定事項
 
-- 公開URLの本番ドメイン（#62 の本番サイトに置くのが本筋。当面は暫定URL）。
-- 問い合わせ先（暫定: GitHub Issues。メールにする場合は差し替え）。
-- Google Play のデータ申告フォームへの入力と、この文書との一致確認。
+- 公開URL: GitHub の本文書（Blob）。本番サイト（#62）ができたら同じ内容を本番ドメインへ移して差し替える。
+- 問い合わせ先: GitHub Issues（公開・無料で、追加の個人情報を必要としないため）。
+- ストア申告: 「Google Play のデータ申告との対応」の内容で入力する。
