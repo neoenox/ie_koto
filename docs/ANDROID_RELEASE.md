@@ -119,5 +119,10 @@ Remove-Item Env:IE_KOTO_ISOLATED_TEST
 - 別ID debugアプリで `integration_test/two_users_test.dart` がAndroid上でも成功。ADB reverseでメモリ上Workerへ実HTTP接続し、依頼・担当・双方コメント・到達不能APIでの未送信保持・再送後の完了共有・重複なし・改名共有と端末本人の独立を確認。
 - これは1エミュレーター内の2つのストアを切り替える検証で、2実端末ではない。同期はテストから明示実行し、ネットワーク遮断や自動タイマー・背景復帰同期は対象外。
 - 端末再起動、2実端末のrelease HTTPS同期、背景復帰時の自動同期検証は未完了。debugエミュレーター結果をrelease実機合格と混同しない。
+- （2026-10-16）既存の本番アップロード鍵を用い、`android/key.properties`（`C:/Users/neoen/.android/release-keys/ie-koto-upload.jks`、別名 `upload`、gitignore済み・値は非表示）を設定して `flutter clean` → `flutter build appbundle --release` を実行。署名済みAAB `build/app/outputs/bundle/release/app-release.aab`（53.4MB、versionName `0.1.0`／versionCode `1`）を生成（exit 0、Gradle `bundleRelease` 約81秒）。環境は Flutter 3.44.0（stable）/ JDK 17.0.19。手順書（22〜31行）のビルド陳腐化回避のためクリーン＋依存再解決つきで実行した。
+- （2026-10-16）`jarsigner -verify <aab>` は exit 0（署名済み・改ざん検出なし。JarFile/JarInputStreamの差に関する情報メッセージのみ）。`keytool -printcert -jarfile <aab>` の署名証明書SHA-256は `5F:1D:60:1D:EA:A3:A6:48:7B:CA:17:6B:55:E3:CE:8A:C9:75:6D:E3:A3:F9:BC:5B:72:3C:62:58:A1:93:52:36` で、記録済みの本番アップロード証明書と一致（`CN=ie_koto, OU=neoenox, O=neoenox, C=JP`）。署名があるだけでは不十分で、指紋一致まで確認した。
+- （2026-10-16）release merged Manifest（`build/app/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml`）で package `com.neoen.ie_koto`、`android.permission.INTERNET` あり、リテラルの改行・バッククォート混入なしを確認。AndroidX標準の `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` も付与されている。
+- （2026-10-16）成果物AABのSHA-256は `DA6202DEA33E6B8A96F459F347CD219E9431103F5C42BD04283D4AA4217EF9B7`。同一入力でのバイト同一再現確認は未実施（2026-10-12の記録とは別ビルド）。`flutter analyze` は問題なし、`flutter test --concurrency=1` は41ファイル／257件成功（exit 0）。
+- 残る未完了：Play Consoleへのアップロード・内部テスト配布と実機release同期（#60/#62/#63）は所有者承認後。AABファイル自体は配布物であり、Gitには含めない。
 - リポジトリ内に既存の配布用鍵・key.propertiesは見つからない。鍵を新規作成・置換していない。
-- 署名済みAAB生成、正式証明書の照合、実機release同期、Play配布は未完了。この文書を配布成功の証拠にしない。
+- （2026-10-16）署名済みrelease AABの生成とアップロード鍵証明書の照合まで完了。実機release同期・Play配布・本番相当環境は未完了（#60/#62/#63）。この文書を実機合格の証拠にしない。
