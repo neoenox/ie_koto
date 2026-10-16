@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- アイコン背景（適応型アイコン・API26+）。アプリの基調色。 -->
+    <color name="ic_launcher_background">#1F5F4B</color>
+</resources>
