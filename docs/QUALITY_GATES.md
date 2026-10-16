@@ -35,6 +35,7 @@
 - 2026-10-16: 公開用の説明文 [PRIVACY.md](PRIVACY.md) を追加し、世帯シートにプライバシー導線（要点ダイアログ＋公開URLコピー）と回帰テスト1件を追加。`flutter analyze` 問題なし、`flutter test --concurrency=1` は41ファイル／258件成功（exit 0）。
 - 2026-10-16: 運用（#66）として server に死活確認 `GET /healthz`（認証不要・DB非依存・GETのみ200）を追加し、`wrangler.toml` に Workers Logs（`[observability] enabled = true`）を有効化。監視・レート制限・容量/費用・障害時初動を [OPERATIONS.md](OPERATIONS.md) に記録。サーバー `npm test` は全28件成功（exit 0、skip 0）。Flutter側のコード変更はなし。
 - 2026-10-16: 復旧（#65）として [RECOVERY.md](RECOVERY.md) を追加（端末移行の復旧範囲、D1のバックアップ/復元、保持方針、アクセス管理、復旧後の cursor・重複・整合性、RPO/RTO、利用者/運用者の手順）。`server/test/backup_restore.test.mjs` で全行ダンプ→別DBへの復元を実証（cursor の続き・二重送信防止・壊れた行の飛ばし・削除後のバックアップ）。[PRIVACY.md](PRIVACY.md) にバックアップ保持の扱いを追記して整合。サーバー `npm test` は全31件成功（exit 0、skip 0）。Flutter側のコード変更はなし。
+- 2026-10-16: 認可・秘密情報（#67）として [SECURITY.md](SECURITY.md) を追加（認可モデル、検証結果の対応表、秘密値の露出経路の棚卸し、本番構成の要件、残存リスク）。`server/test/security.test.mjs` で穴を補完（別世帯の管理操作の拒否・削除後の再作成の実挙動・入力の形とサイズ上限・平文の秘密がDBに無い・期限の境界・CORSの反射）。サーバー `npm test` は全37件成功（exit 0、skip 0）。Flutter側のコード変更はなし。
 
 ## GitHub上の運用
 
