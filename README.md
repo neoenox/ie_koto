@@ -106,6 +106,7 @@ https://<アプリとAPIのドメイン>/#one?i=<案件id>&h=<世帯id>&t=<世�
 - 同期サーバー（API4本・デプロイ手順・手元での動かし方）: [server/README.md](server/README.md)
 - 設計の判断と禁止リスト: [docs/DECISIONS.md](docs/DECISIONS.md)
 - 通知の方針（アプリ内は済み・OS通知は当面見送り）: [docs/adr/0002-notification-policy.md](docs/adr/0002-notification-policy.md)
+- 「割り当て」と「引き受け」の区別（受諾状態は作らない）: [docs/adr/0003-assignment-vs-acceptance.md](docs/adr/0003-assignment-vs-acceptance.md)
 - 触って確かめる7つの流れ: [docs/SCENARIOS.md](docs/SCENARIOS.md)
 - 実行した検証と、まだ確かめていないこと: [docs/VERIFICATION.md](docs/VERIFICATION.md)
 - プライバシーと記録の扱い（保存・共有の範囲・削除・鍵紛失）: [docs/PRIVACY.md](docs/PRIVACY.md)
