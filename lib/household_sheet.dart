@@ -7,7 +7,7 @@ import 'store.dart';
 import 'sync/setup.dart';
 import 'sync/storage.dart';
 
-/// 公開用のプライバシー説明のURL（[docs/PRIVACY.md](../docs/PRIVACY.md)）。所有者が確定するまでの暫定。
+/// 公開用のプライバシー説明のURL（[docs/PRIVACY.md](../docs/PRIVACY.md)）。
 const String privacyUrl =
     'https://github.com/neoenox/ie_koto/blob/main/docs/PRIVACY.md';
 
