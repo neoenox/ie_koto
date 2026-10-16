@@ -250,7 +250,10 @@ void main() {
 
     await tester.tap(find.text('はいっている家にはいる'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('はいる'));
+    await tester.tap(find.text('詳細設定'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('この家に入る'));
+    await tester.tap(find.text('この家に入る'));
     await tester.pumpAndSettle();
 
     // 欄に紐付いた誤りが出て、シートは閉じない。

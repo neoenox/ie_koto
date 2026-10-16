@@ -68,13 +68,21 @@ void main() {
     await tester.pumpWidget(const IeKotoApp(joinLink: join));
     await tester.pumpAndSettle();
 
-    // 「はいる」側が開き、3値が入っている。
     expect(find.text('はいっている家にはいる'), findsOneWidget);
-    final fields = find.byType(TextField);
+    expect(find.text('招待を読み込みました'), findsOneWidget);
+    expect(find.text('この家に入る'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.ensureVisible(find.text('詳細設定'));
+    await tester.tap(find.text('詳細設定'));
+    await tester.pumpAndSettle();
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
     expect(
-      tester.widget<TextField>(fields.at(1)).controller!.text,
-      'hh_abcdefghijklmnopqrstuv',
+      fields.map((field) => field.controller!.text),
+      containsAll([
+        'https://example.workers.dev',
+        'hh_abcdefghijklmnopqrstuv',
+        _token,
+      ]),
     );
-    expect(tester.widget<TextField>(fields.at(2)).controller!.text, _token);
   });
 }
