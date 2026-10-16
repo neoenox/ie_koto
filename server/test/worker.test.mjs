@@ -58,6 +58,26 @@ function get(env, { since = 0, limit, issue, token = TOKEN, household = HOME } =
   return call(env, `/ops?${query}`, { headers: { authorization: `Bearer ${token}` } });
 }
 
+test('死活確認 /healthz は認証もDBも要らない', async () => {
+  const { env, db } = newEnv();
+  try {
+    const reply = await call(env, '/healthz');
+    assert.equal(reply.status, 200);
+    assert.deepEqual(reply.body, { ok: true });
+    assert.equal(reply.headers.get('cache-control'), 'no-store');
+    // DBには触らない（世帯の行が作られない）。
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM households').get().n, 0);
+    // GET以外は 405。
+    const wrongMethod = await call(env, '/healthz', { method: 'POST' });
+    assert.equal(wrongMethod.status, 405);
+    // 未知のパスは今までどおり 404。
+    const notFound = await call(env, '/nope');
+    assert.equal(notFound.status, 404);
+  } finally {
+    db.close();
+  }
+});
+
 test('論理時計は正の32bit整数だけ受け付ける', async () => {
   for (const clock of [0, -1, 1.5, 2147483648, 2 ** 53]) {
     const { env, db } = newEnv();

@@ -13,3 +13,9 @@ database_id = "ここに d1 create の database_id"
 # 開発中は別のポート（flutter run -d web-server）から叩くので許可する。
 # 本番はアプリのWebビルドと同じドメインに置くので、ここは自分のドメインに絞ってよい。
 ALLOWED_ORIGIN = "*"
+
+# 監視: Workers Logs を有効にする（ダッシュボードのログで console.* を確認できる）。
+# リクエスト数・エラー率・CPU時間・D1 の読み書きは、Cloudflare ダッシュボードの
+# Workers/D1 メトリクスで見る（docs/OPERATIONS.md）。秘密は console に出さない。
+[observability]
+enabled = true
