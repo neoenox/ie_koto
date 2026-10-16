@@ -15,8 +15,10 @@ import 'sync/session.dart';
 import 'sync/status_line.dart';
 import 'widgets.dart';
 
-/// ホームに出すのは「今やるもの」と「あとで」の2つだけ。
+/// ホームに出すのは「今日」と「これから」の2つだけ。
 /// グラフもカレンダーも達成率も置かない。
+/// 「今日」= 期限が今日以前（超過・当日を含む）。「これから」= 将来の期限と、期限のないもの。
+/// 期限なしは「先送り」ではなく「期限を決めていない」もので、行に「期限なし」と出す。
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -165,7 +167,7 @@ class _HomePageState extends State<HomePage> {
                           ],
                           if (later.isNotEmpty) ...[
                             _section(
-                              'あとで',
+                              'これから',
                               later.where((i) => !i.isDone).length,
                             ),
                             ..._rows(later),
@@ -397,7 +399,12 @@ class _HomePageState extends State<HomePage> {
   List<String> _metaWords(Issue issue) {
     final store = widget.store;
     final words = <String>[];
-    if (issue.dueDate != null) words.add(dueLabel(issue.dueDate!, store.now));
+    // 期限の欄は「期限なし」で埋める。先送りではなく期限未定だと伝える。
+    if (issue.dueDate != null) {
+      words.add(dueLabel(issue.dueDate!, store.now));
+    } else {
+      words.add('期限なし');
+    }
     if (issue.assigneeId != null) {
       words.add(store.assigneeWord(issue.assigneeId));
     }
