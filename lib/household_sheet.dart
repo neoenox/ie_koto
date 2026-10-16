@@ -7,6 +7,10 @@ import 'store.dart';
 import 'sync/setup.dart';
 import 'sync/storage.dart';
 
+/// 公開用のプライバシー説明のURL（[docs/PRIVACY.md](../docs/PRIVACY.md)）。所有者が確定するまでの暫定。
+const String privacyUrl =
+    'https://github.com/neoenox/ie_koto/blob/main/docs/PRIVACY.md';
+
 /// 世帯とつなげるためのシート。ホームの世帯名から開く。
 ///
 /// - つながっていないとき: 「あたらしくつくる」「はいっている家にはいる」
@@ -129,6 +133,8 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
               _meSection(widget.store!),
               const SizedBox(height: 8),
               _backupSection(widget.store!),
+              const SizedBox(height: 4),
+              _privacySection(),
             ],
           ],
         ),
@@ -895,6 +901,81 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  /// 公開用の説明文と同じ内容の要点。ここから公開URLもコピーできる。
+  Widget _privacySection() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        onPressed: _privacyDialog,
+        style: TextButton.styleFrom(padding: EdgeInsets.zero),
+        child: const Text('プライバシーと記録の扱い'),
+      ),
+    );
+  }
+
+  Future<void> _privacyDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          'プライバシーと記録の扱い',
+          style: TextStyle(fontSize: 16),
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SheetCaption(text: '保存するもの'),
+              Text(
+                'この端末と、つないだ世帯だけに、用事・コメント・表示名・操作の記録を保存します。個人ログイン・広告・アナリティクスはありません。',
+                style: TextStyle(fontSize: 13),
+              ),
+              SizedBox(height: 10),
+              _SheetCaption(text: '共有される範囲'),
+              Text(
+                '世帯トークン（招待リンク）を持つ端末は、世帯の記録を読めます。1件リンクは指定した1件だけを7日間だけ渡します。',
+                style: TextStyle(fontSize: 13),
+              ),
+              SizedBox(height: 10),
+              _SheetCaption(text: '消す・引っ越す'),
+              Text(
+                '世帯を消すとサーバーの記録を消します（この端末の記録は残ります）。端末の記録はアプリのデータ消去で消え、書き出し／読み込みで引っ越せます。',
+                style: TextStyle(fontSize: 13),
+              ),
+              SizedBox(height: 10),
+              _SheetCaption(text: '紛失・漏えい'),
+              Text(
+                '招待リンクが漏れたら再発行すると古いリンクが失効します。世帯トークンを失うと復元できません。',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(
+                const ClipboardData(text: privacyUrl),
+              );
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('公開ページのURLをコピーしました')),
+              );
+            },
+            child: const Text('URLをコピー'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('とじる'),
+          ),
+        ],
+      ),
     );
   }
 
