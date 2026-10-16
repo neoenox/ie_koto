@@ -501,11 +501,12 @@ class IssueStore extends ChangeNotifier {
     return 0;
   }
 
-  /// 今日やるもの。期限が今日以前のものだけ。自分の担当かどうかは問わない。
+  /// 今日やるもの。期限が今日以前（超過・当日を含む）のものだけ。担当かどうかは問わない。
   List<Issue> get todayQueue =>
       _queue((i) => !i.isDone && _isTodayDue(i), _todayOrder);
 
-  /// あとで。期限がないもの、先のもの。
+  /// これから。将来の期限（昇順）と、期限のないもの（追加順）をこの順で並べる。
+  /// 期限なしは「先送り」ではなく「期限を決めていない」もの。画面では行に「期限なし」と出す。
   List<Issue> get laterQueue =>
       _queue((i) => !i.isDone && !_isTodayDue(i), _laterOrder);
 
@@ -513,7 +514,7 @@ class IssueStore extends ChangeNotifier {
   List<Issue> get todayRows =>
       _queue((i) => _showsInList(i) && _isTodayDue(i), _todayOrder);
 
-  /// 画面に出す「あとで」の行。完了した直後のものも、元の並びの位置に残す。
+  /// 画面に出す「これから」の行。完了した直後のものも、元の並びの位置に残す。
   List<Issue> get laterRows =>
       _queue((i) => _showsInList(i) && !_isTodayDue(i), _laterOrder);
 

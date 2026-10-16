@@ -68,6 +68,10 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: '登録後');
+      // 文字2.0倍では追加欄が開いたままだと一覧が狭く、行が画面の外に隠れる。
+      // 実際の操作と同じく、登録後はいったん追加欄を閉じてから行を開く。
+      await tester.tap(find.byTooltip('とじる'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('牛乳を買う'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: '詳細');

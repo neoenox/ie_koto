@@ -73,13 +73,19 @@ void main() {
     expect(store.openIssues.map((i) => i.title), contains('トイレットペーパーを買う'));
   });
 
-  test('期限が今日までのものは今日、それ以外はあとで', () {
+  test('今日は期限当日以前、これからは将来の期限（昇順）と期限なし（追加順）', () {
     final store = storeAt(DateTime(2026, 10, 6, 9));
+    store.add(title: '昨日のぶん', dueDate: DateTime(2026, 10, 5));
     store.add(title: '今日のぶん', dueDate: DateTime(2026, 10, 6));
     store.add(title: '明後日のぶん', dueDate: DateTime(2026, 10, 8));
     store.add(title: '期限なしのぶん');
-    expect(store.todayQueue.map((i) => i.title), ['今日のぶん']);
-    expect(store.laterQueue.map((i) => i.title), ['明後日のぶん', '期限なしのぶん']);
+    store.add(title: '期限なしのあとのぶん');
+    expect(store.todayQueue.map((i) => i.title), ['昨日のぶん', '今日のぶん']);
+    expect(store.laterQueue.map((i) => i.title), [
+      '明後日のぶん',
+      '期限なしのぶん',
+      '期限なしのあとのぶん',
+    ]);
   });
 
   test('毎日は完了すると翌日の1件が自動で出てくる', () {

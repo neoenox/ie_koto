@@ -13,12 +13,26 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('ホームは今日とあとでだけを出す', (tester) async {
+  testWidgets('ホームは今日とこれからだけを出す', (tester) async {
     await pumpApp(tester);
     expect(find.text('家のこと'), findsOneWidget);
     expect(find.text('今日'), findsOneWidget);
-    expect(find.text('あとで'), findsOneWidget);
+    expect(find.text('これから'), findsOneWidget);
+    expect(find.text('あとで'), findsNothing);
     expect(find.text('牛乳を買う'), findsOneWidget);
+  });
+
+  testWidgets('期限なしの用事は「これから」に「期限なし」と出る', (tester) async {
+    final store = IssueStore(clock: () => DateTime(2026, 10, 6, 9));
+    store.add(title: 'トイレットペーパーがない');
+    store.add(title: '保育園の書類', dueDate: DateTime(2026, 10, 8));
+    await tester.pumpWidget(IeKotoApp(store: store));
+    await tester.pumpAndSettle();
+    expect(find.text('これから'), findsOneWidget);
+    // 期限なしの行だけに印が出て、期限ありには出ない。
+    expect(find.text('期限なし'), findsOneWidget);
+    expect(find.text('トイレットペーパーがない'), findsOneWidget);
+    expect(find.text('保育園の書類'), findsOneWidget);
   });
 
   testWidgets('デモの案件がすべてホームに出る', (tester) async {
@@ -152,7 +166,7 @@ void main() {
     await tester.pumpWidget(IeKotoApp(store: store));
     await tester.pumpAndSettle();
 
-    // 今日の案件を足す。一覧の末尾（あとで）ではなく、上の「今日」に入る。
+    // 今日の案件を足す。一覧の末尾（これから）ではなく、上の「今日」に入る。
     await tester.tap(find.text('追加'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('今日').last);
