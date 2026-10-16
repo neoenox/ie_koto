@@ -647,6 +647,9 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           if (IssueStore.isReservedMemberName(trimmed)) {
             return '「自分」「パートナー」は使えません。なまえ等を入れてください';
           }
+          if (trimmed.length > IssueStore.maxMemberNameLength) {
+            return '80字以内で入力してください';
+          }
           return '自分の名前だけ変えられます';
         }
         return null;
@@ -776,6 +779,10 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
             }
             if (IssueStore.isReservedMemberName(trimmed)) {
               setDialog(() => error = '「自分」「パートナー」は使えません。なまえ等を入れてください');
+              return;
+            }
+            if (trimmed.length > IssueStore.maxMemberNameLength) {
+              setDialog(() => error = '80字以内で入力してください');
               return;
             }
             Navigator.of(ctx).pop(controller.text);
