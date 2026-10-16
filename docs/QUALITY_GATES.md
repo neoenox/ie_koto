@@ -32,6 +32,7 @@
 - 実機IME・OS再起動・オフラインreload・正式署名・実2端末HTTPS/D1・ホストCIは未検証。このローカル合格だけで配布しない。
 - 2026-10-13: 並列実行の `flutter test` でテストファイルごと黙って読み込まれない場合がある（`sync_worker_e2e` 3件の欠落を2回確認、失敗0・exit 0のまま）。`flutter test --concurrency=1` では40ファイルすべて読み込み・249件成功を確認。件数の確定が必要な検証回では直列実行を用いる。（注：合計値は追記で残し、既存の行を書き換えない）
 - 2026-10-16: `flutter analyze` 問題なし、`flutter test --concurrency=1` は41ファイル／257件成功（exit 0）。本番アップロード鍵（`android/key.properties`、gitignore済み）で `flutter clean` → `flutter build appbundle --release` を実行し署名済みAABを生成（`build/app/outputs/bundle/release/app-release.aab`、53.4MB、`0.1.0+1`、exit 0）。`jarsigner -verify` exit 0、署名証明書SHA-256は本番アップロード証明書と一致（`CN=ie_koto`）。release merged ManifestにINTERNETあり。詳細は [ANDROID_RELEASE.md](ANDROID_RELEASE.md)。CIの `release-compile` は引き続き一時鍵で、本番署名AABはローカル手動（この範囲は自動化しない）。実機release受入・Play配布は未完了（#60/#62/#63）。
+- 2026-10-16: 公開用の説明文 [PRIVACY.md](PRIVACY.md) を追加し、世帯シートにプライバシー導線（要点ダイアログ＋公開URLコピー）と回帰テスト1件を追加。`flutter analyze` 問題なし、`flutter test --concurrency=1` は41ファイル／258件成功（exit 0）。
 
 ## GitHub上の運用
 

@@ -30,6 +30,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('世帯のシートからプライバシーと記録の扱いを開ける', (tester) async {
+    final store = IssueStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: HouseholdSheet(current: null, store: store)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final entry = find.text('プライバシーと記録の扱い');
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    // ダイアログが開き、要点と公開URLのコピー導線が出る。
+    expect(find.text('保存するもの'), findsOneWidget);
+    expect(find.text('共有される範囲'), findsOneWidget);
+    expect(find.text('URLをコピー'), findsOneWidget);
+    // 閉じられる。
+    await tester.tap(find.text('とじる'));
+    await tester.pumpAndSettle();
+    expect(find.text('保存するもの'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final size in [const Size(360, 800), const Size(320, 568)]) {
     testWidgets('小さい画面 $size でも最後のくりかえしを選べる', (tester) async {
       tester.view.physicalSize = size;
