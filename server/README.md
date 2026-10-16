@@ -80,12 +80,13 @@ npx wrangler login
 
 ## 確かめてあること
 
-`npm test` の28件は、**schema.sql と src/ をそのまま**動かして確かめている（差し替えているのは D1 だけ）:
+`npm test` の31件は、**schema.sql と src/ をそのまま**動かして確かめている（差し替えているのは D1 だけ）:
 挿入順の取り出し、差分、二重POST、同時POST、ページング、世帯ごとの独立、トークンの拒否、
 壊れたopの拒否（まとめて400）、件数上限、`derivedFrom` の保存、壊れた行の読み飛ばし、CORS、
 `issue=` の絞り込み（ほかの案件が混ざらない・誰も知らないidは空・空文字と長すぎるidは400）、
 トークンの作り直し（古い招待文の失効・短いトークンの拒否）、世帯の削除（opと世帯の行が消え、端末の記録は残る）、
-`/healthz`（認証不要・DB非依存・GETのみ）。
+`/healthz`（認証不要・DB非依存・GETのみ）、
+バックアップと復元（全行ダンプを別DBへ戻して cursor の続き・二重送信防止・壊れた行の飛ばしが保たれる。[../docs/RECOVERY.md](../docs/RECOVERY.md)）。
 
 Dart 側からは [../test/sync_worker_e2e_test.dart](../test/sync_worker_e2e_test.dart) が
 `npm run serve` を起動して、**実際にHTTPで**2台の端末役を収束させる。

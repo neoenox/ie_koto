@@ -108,4 +108,6 @@ https://<アプリとAPIのドメイン>/#one?i=<案件id>&h=<世帯id>&t=<世�
 - 触って確かめる7つの流れ: [docs/SCENARIOS.md](docs/SCENARIOS.md)
 - 実行した検証と、まだ確かめていないこと: [docs/VERIFICATION.md](docs/VERIFICATION.md)
 - プライバシーと記録の扱い（保存・共有の範囲・削除・鍵紛失）: [docs/PRIVACY.md](docs/PRIVACY.md)
+- 端末移行とサーバー復旧の手順（バックアップ・復元・RPO/RTO）: [docs/RECOVERY.md](docs/RECOVERY.md)
+- 監視・レート制限・容量と費用の運用: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 - 企画の市場調査（なぜこう絞ったか）: [docs/VALIDATION.md](docs/VALIDATION.md)
