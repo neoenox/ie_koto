@@ -84,6 +84,41 @@ void main() {
       expect(tester.takeException(), isNull, reason: '世帯設定');
     });
   }
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('320px・文字$scale倍で履歴が見えてタップで開ける', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final store = IssueStore();
+      final milk = store.add(title: '牛乳を買う');
+      final long = store.add(title: 'これはとても長いタイトルのやることです');
+      store.complete(milk.id);
+      store.complete(long.id);
+      await tester.pumpWidget(IeKotoApp(store: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('done-open')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: '履歴');
+      expect(find.text('おわったもの'), findsOneWidget);
+      expect(find.text('これはとても長いタイトルのやることです'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('done-title-search')),
+        '牛乳',
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: '履歴検索');
+      final hit = find.text('牛乳を買う');
+      expect(hit, findsOneWidget);
+      await tester.ensureVisible(hit);
+      await tester.pumpAndSettle();
+      await tester.tap(hit);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: '履歴から詳細');
+      expect(find.byKey(const ValueKey('detail-undo')), findsOneWidget);
+    });
+  }
   testWidgets('320px・キーボード表示でも人を追加できる', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;
