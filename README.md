@@ -111,4 +111,5 @@ https://<アプリとAPIのドメイン>/#one?i=<案件id>&h=<世帯id>&t=<世�
 - 端末移行とサーバー復旧の手順（バックアップ・復元・RPO/RTO）: [docs/RECOVERY.md](docs/RECOVERY.md)
 - 公開構成の認可・鍵・失効と秘密情報の棚卸し: [docs/SECURITY.md](docs/SECURITY.md)
 - 監視・レート制限・容量と費用の運用: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- ストア掲載の素材と申告（説明文・アイコン・スクショ・データセーフティ）: [docs/STORE_LISTING.md](docs/STORE_LISTING.md)
 - 企画の市場調査（なぜこう絞ったか）: [docs/VALIDATION.md](docs/VALIDATION.md)
