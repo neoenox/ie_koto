@@ -6,6 +6,7 @@
  *   POST /ops                                 自分の op を送る
  *   DELETE /ops?household=<id>                世帯を消す（opと世帯の行。端末の記録は残る）
  *   POST /household/rotate                   トークンを作り直す
+ *   GET  /healthz                            死活確認（認証不要・DBに触らない）
  *
  * どれも `Authorization: Bearer <世帯トークン>` が要る。
  * 世帯の行は最初のアクセスで作られる（そのとき提示されたトークンが、その世帯の鍵になる）。
@@ -40,6 +41,11 @@ export default {
     const cors = corsHeaders(request, env);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    // 監視・死活確認用。DBに触らず、認証も要らない（秘密を渡さない）。
+    if (url.pathname === '/healthz') {
+      if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, cors);
+      return json({ ok: true }, 200, { ...cors, 'cache-control': 'no-store' });
+    }
     if (url.pathname !== '/ops' && url.pathname !== '/household/rotate' && url.pathname !== '/household/share' &&
         url.pathname !== '/household/members/migrate' && url.pathname !== '/household/members' &&
         url.pathname !== '/household/members/merge' && url.pathname !== '/household/members/remove') {
