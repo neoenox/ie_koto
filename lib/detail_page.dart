@@ -129,6 +129,12 @@ class _DetailPageState extends State<DetailPage> {
                 value: issue.recurrence.label,
                 onTap: () => _pickRecurrence(issue),
               ),
+              AttrRow(
+                key: const ValueKey('detail-memo'),
+                label: 'メモ',
+                value: _memoValue(issue),
+                onTap: () => _editMemo(issue),
+              ),
               if (!issue.recurrence.isNone) _seriesHistoryLinks(issue),
               const SizedBox(height: 10),
               if (!issue.isDone) ...[
@@ -475,6 +481,67 @@ class _DetailPageState extends State<DetailPage> {
           ),
           FilledButton(
             onPressed: () => save(ctx, controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    // popのアニメーション中に破棄するとTextFieldが壊れるため、破棄しない。
+  }
+
+  /// 詳細の1行に出す、メモの先頭だけ。無ければ「なし」。
+  String _memoValue(Issue issue) {
+    final note = issue.note?.trim();
+    if (note == null || note.isEmpty) return 'なし';
+    final line = note.split('\n').first.trim();
+    return line.length <= 24 ? line : '${line.substring(0, 24)}…';
+  }
+
+  /// 詳細の中で参照するメモ。任意・1つ。空にして保存すると消える。
+  Future<void> _editMemo(Issue issue) async {
+    final controller = TextEditingController(text: issue.note ?? '');
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('メモ', style: TextStyle(fontSize: 16)),
+        content: TextField(
+          key: const ValueKey('memo-field'),
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 8,
+          keyboardType: TextInputType.multiline,
+          textInputAction: TextInputAction.newline,
+          decoration: const InputDecoration(hintText: '型番・連絡先・注意点など（いま参照する情報）'),
+        ),
+        actions: [
+          if ((issue.note ?? '').trim().isNotEmpty)
+            TextButton(
+              key: const ValueKey('memo-clear'),
+              onPressed: () {
+                if (guardWrite(
+                  context,
+                  () => widget.store.setNote(issue.id, ''),
+                )) {
+                  Navigator.of(ctx).pop();
+                }
+              },
+              child: const Text('消去'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('やめる'),
+          ),
+          FilledButton(
+            key: const ValueKey('memo-save'),
+            onPressed: () {
+              if (guardWrite(
+                context,
+                () => widget.store.setNote(issue.id, controller.text),
+              )) {
+                Navigator.of(ctx).pop();
+              }
+            },
             child: const Text('保存'),
           ),
         ],

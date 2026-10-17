@@ -178,20 +178,28 @@ void main() {
       Op(
         deviceId: 'B',
         lamport: 8,
+        kind: OpKind.note,
+        issueId: 'B:1',
+        at: DateTime(2026, 10, 2),
+        data: <String, Object?>{'text': '管理会社 03-0000-0000'},
+      ),
+      Op(
+        deviceId: 'B',
+        lamport: 9,
         kind: OpKind.complete,
         issueId: 'B:1',
         at: DateTime(2026, 10, 3),
       ),
       Op(
         deviceId: 'B',
-        lamport: 9,
+        lamport: 10,
         kind: OpKind.reopen,
         issueId: 'B:1',
         at: DateTime(2026, 10, 3),
       ),
       Op(
         deviceId: 'B',
-        lamport: 10,
+        lamport: 11,
         kind: OpKind.delete,
         issueId: 'B:1',
         at: DateTime(2026, 10, 3),
@@ -213,6 +221,7 @@ void main() {
     expect(every.fromCompletion, isFalse);
     expect(back.ops[5].data['status'], IssueStatus.waiting);
     expect(back.ops[6].data['text'], '管理会社に電話した');
+    expect(back.ops[7].data['text'], '管理会社 03-0000-0000');
   });
 
   test('自動生成された「次の1件」は、元になった完了opを持って往復する', () {

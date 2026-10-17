@@ -1,13 +1,14 @@
 {
-    "name": "ie_koto",
-    "short_name": "ie_koto",
+    "name": "いえこと",
+    "short_name": "いえこと",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#1F5F4B",
+    "description": "家のあれやらなきゃを、忘れない。家族で使う、家のやることリスト。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "lang": "ja",
     "icons": [
         {
             "src": "icons/Icon-192.png",

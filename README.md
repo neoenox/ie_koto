@@ -102,7 +102,7 @@ https://<アプリとAPIのドメイン>/#one?i=<案件id>&h=<世帯id>&t=<世�
 
 | 画面 | 出るもの | 主な操作は1つ |
 |---|---|---|
-| ホーム | 「今日」と「あとで」。1行は最大2行（タイトル＋情報は最大2つ）。要るときだけお知らせ1行 | 追加 |
+| ホーム | 「今日」と「これから」。1行は最大2行（タイトル＋情報は最大2つ）。要るときだけお知らせ1行 | 追加 |
 | 追加 | 何する？／だれ／いつ。**打ってEnterで登録完了** | 追加 |
 | 詳細 | だれが・いつまで・くりかえし（畳んである）／これまで／ひとこと | おわった |
 | おわったもの | これまで終わったもの（新しい順） | 見るだけ |
@@ -113,6 +113,15 @@ https://<アプリとAPIのドメイン>/#one?i=<案件id>&h=<世帯id>&t=<世�
 - 同期とアカウントの設計: [docs/SYNC_DESIGN.md](docs/SYNC_DESIGN.md)
 - 同期サーバー（API4本・デプロイ手順・手元での動かし方）: [server/README.md](server/README.md)
 - 設計の判断と禁止リスト: [docs/DECISIONS.md](docs/DECISIONS.md)
+- 通知の方針（アプリ内は済み・OS通知は当面見送り）: [docs/adr/0002-notification-policy.md](docs/adr/0002-notification-policy.md)
+- 「割り当て」と「引き受け」の区別（受諾状態は作らない）: [docs/adr/0003-assignment-vs-acceptance.md](docs/adr/0003-assignment-vs-acceptance.md)
+- 案件のメモ（詳細内・任意・現在参照する情報）: [docs/adr/0004-issue-memo.md](docs/adr/0004-issue-memo.md)
+- 写真・添付（当面見送り。採るなら別経路）: [docs/adr/0005-photo-attachments.md](docs/adr/0005-photo-attachments.md)
 - 触って確かめる7つの流れ: [docs/SCENARIOS.md](docs/SCENARIOS.md)
 - 実行した検証と、まだ確かめていないこと: [docs/VERIFICATION.md](docs/VERIFICATION.md)
+- プライバシーと記録の扱い（保存・共有の範囲・削除・鍵紛失）: [docs/PRIVACY.md](docs/PRIVACY.md)
+- 端末移行とサーバー復旧の手順（バックアップ・復元・RPO/RTO）: [docs/RECOVERY.md](docs/RECOVERY.md)
+- 公開構成の認可・鍵・失効と秘密情報の棚卸し: [docs/SECURITY.md](docs/SECURITY.md)
+- 監視・レート制限・容量と費用の運用: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- ストア掲載の素材と申告（説明文・アイコン・スクショ・データセーフティ）: [docs/STORE_LISTING.md](docs/STORE_LISTING.md)
 - 企画の市場調査（なぜこう絞ったか）: [docs/VALIDATION.md](docs/VALIDATION.md)

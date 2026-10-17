@@ -296,5 +296,8 @@ class _OnePageState extends State<OnePage> {
 /// 開くたびに新しくなる端末id。opのidが世帯のものとぶつからない長さにする。
 String _guestId() {
   final random = Random.secure();
-  return 'g${random.nextInt(1 << 30).toRadixString(36)}${random.nextInt(1 << 30).toRadixString(36)}';
+  // 各30bitを36進6桁に固定する。桁数がぶれると「十分な長さ」が崩れるため。
+  String part() =>
+      random.nextInt(1 << 30).toRadixString(36).padLeft(6, '0');
+  return 'g${part()}${part()}';
 }

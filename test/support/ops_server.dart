@@ -124,7 +124,15 @@ class OpsServer {
       final body =
           jsonDecode(await utf8.decoder.bind(request).join())
               as Map<String, Object?>;
-      members[body['id']! as String] = body['name']! as String;
+      // 本番（server/src/index.js handleSaveMember）と同じ80文字上限で拒否する。
+      final name = (body['name'] as String? ?? '').trim();
+      if (name.isEmpty || name.length > 80) {
+        response.statusCode = 400;
+        response.write('{"error":"bad_member"}');
+        await response.close();
+        return;
+      }
+      members[body['id']! as String] = name;
       response.write(jsonEncode(body));
       await response.close();
       return;

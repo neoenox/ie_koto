@@ -153,6 +153,7 @@ bool _validData(OpKind kind, Map data) {
           optionalDate('dueDate') &&
           optionalString('seriesId') &&
           optionalString('originIssueId') &&
+          optionalString('note') &&
           (!data.containsKey('recurrence') ||
               data['recurrence'] == null ||
               recurrence(data['recurrence']));
@@ -170,6 +171,9 @@ bool _validData(OpKind kind, Map data) {
           (data['text'] as String).trim().isNotEmpty;
     case OpKind.status:
       return _statusOf(data['status']) != null;
+    case OpKind.note:
+      // 空文字は「メモを消した」。文字列なら空でも通す。
+      return data.containsKey('text') && optionalString('text');
     default:
       return true;
   }

@@ -149,6 +149,10 @@ class IssueStore extends ChangeNotifier {
     return normalized == '自分' || normalized == 'パートナー';
   }
 
+  /// 世帯で共有する表示名の上限。サーバー（`server/src/index.js`）と同じ80文字。
+  /// ここで弾かないと、サーバーが400で拒否して操作opの同期まで止まる（#128）。
+  static const int maxMemberNameLength = 80;
+
   Future<void> Function(Member member)? onMemberWrite;
 
   /// この端末を使う人を変える。端末に残る（同期しない）。
@@ -168,7 +172,7 @@ class IssueStore extends ChangeNotifier {
   }
 
   /// 自分の表示名だけ変えられる。他人の名前は変えられない。
-  /// 空・予約名（自分／パートナー）も変えられない。変えたら true。
+  /// 空・予約名（自分／パートナー）・81文字以上も変えられない。変えたら true。
   bool renameMember(String id, String name) {
     id = canonicalMemberId(id);
     if (id != canonicalMemberId(meId)) return false;
@@ -177,6 +181,7 @@ class IssueStore extends ChangeNotifier {
     final index = members.indexWhere((m) => m.id == id);
     if (index < 0) return false;
     if (members[index].name == trimmed) return true;
+    if (trimmed.length > maxMemberNameLength) return false;
     members[index] = Member(id, trimmed);
     storage?.saveMemberNames({for (final m in members) m.id: m.name});
     _markMemberPending(members[index]);
@@ -191,6 +196,9 @@ class IssueStore extends ChangeNotifier {
     }
     if (isReservedMemberName(trimmed)) {
       throw ArgumentError.value(name, 'name', '「自分」「パートナー」は使えません。なまえ等を入れてください');
+    }
+    if (trimmed.length > maxMemberNameLength) {
+      throw ArgumentError.value(name, 'name', '80字以内で入力してください');
     }
     final member = Member('mem_${Device.newId()}', trimmed);
     members.add(member);
@@ -493,11 +501,12 @@ class IssueStore extends ChangeNotifier {
     return 0;
   }
 
-  /// 今日やるもの。期限が今日以前のものだけ。自分の担当かどうかは問わない。
+  /// 今日やるもの。期限が今日以前（超過・当日を含む）のものだけ。担当かどうかは問わない。
   List<Issue> get todayQueue =>
       _queue((i) => !i.isDone && _isTodayDue(i), _todayOrder);
 
-  /// あとで。期限がないもの、先のもの。
+  /// これから。将来の期限（昇順）と、期限のないもの（追加順）をこの順で並べる。
+  /// 期限なしは「先送り」ではなく「期限を決めていない」もの。画面では行に「期限なし」と出す。
   List<Issue> get laterQueue =>
       _queue((i) => !i.isDone && !_isTodayDue(i), _laterOrder);
 
@@ -505,7 +514,7 @@ class IssueStore extends ChangeNotifier {
   List<Issue> get todayRows =>
       _queue((i) => _showsInList(i) && _isTodayDue(i), _todayOrder);
 
-  /// 画面に出す「あとで」の行。完了した直後のものも、元の並びの位置に残す。
+  /// 画面に出す「これから」の行。完了した直後のものも、元の並びの位置に残す。
   List<Issue> get laterRows =>
       _queue((i) => _showsInList(i) && !_isTodayDue(i), _laterOrder);
 
@@ -686,6 +695,20 @@ class IssueStore extends ChangeNotifier {
     );
   }
 
+  /// 詳細の中で参照するメモ。空文字は「消す」。書き込みは前後の空白を落とす。
+  void setNote(String id, String text) {
+    if (byId(id) == null) return;
+    _commit(
+      () => _device.write(
+        OpKind.note,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'text': text.trim()},
+      ),
+    );
+  }
+
   void comment(String id, String text) {
     final t = text.trim();
     if (t.isEmpty || byId(id) == null) return;
@@ -778,6 +801,7 @@ class IssueStore extends ChangeNotifier {
       status: task.status,
       seriesId: task.seriesId,
       completedAt: task.completedAt,
+      note: task.note,
       events: _events(task),
     );
     issue.generatedNextId = task.generatedNextId;
@@ -876,6 +900,9 @@ class IssueStore extends ChangeNotifier {
           actorId: actor,
           text: 'もどした',
         );
+      case OpKind.note:
+        // メモは詳細の中に出るので、履歴には残さない（名前と同じ扱い）。
+        return null;
       case OpKind.delete:
         return null;
     }
