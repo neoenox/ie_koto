@@ -3,6 +3,7 @@
 `release`版をAndroid実機で受け入れるための手順と記録用紙。
 自動テスト（`integration_test/app_flows_test.dart`）とエミュレータdebug E2Eは合格済みだが、
 実機の代替にしない。1項目でも不合格・未実施が残れば #60 は閉じない。
+全体の順番では [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md) の E（内部テスト配布の後）。
 
 ## 前提
 

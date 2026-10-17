@@ -111,6 +111,8 @@
 
 ## 内部テスト配布（所有者作業）
 
+全体の順番と止める条件は [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md) の D。ここは配布の手順のみ。
+
 1. Play Console に初回登録（開発者契約・本人確認・支払い）。
 2. アプリを作成し、Play App Signing を有効化。アップロード鍵は既存の鍵（アップロード証明書SHA-256 `5F:1D:…:36`、`CN=ie_koto`）を使う。照合手順は [ANDROID_RELEASE.md](ANDROID_RELEASE.md)。
 3. 署名済みAAB `build/app/outputs/bundle/release/app-release.aab`（Gitには含めない）を内部テストのトラックへアップロード。
