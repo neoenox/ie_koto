@@ -1,5 +1,7 @@
 # Android配布前のビルドと署名（#59）
 
+全体の順番と完了条件は [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md)。この文書はビルドと署名の詳細。
+
 ## 方針
 
 applicationIdは既存の `com.neoen.ie_koto` を維持する。公開済みアプリのID・署名鍵を無断で変更しない。
