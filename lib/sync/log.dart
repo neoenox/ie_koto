@@ -19,6 +19,7 @@ enum OpKind {
   recurrence,
   status,
   comment,
+  note,
   complete,
   reopen,
   delete,
@@ -248,6 +249,9 @@ class Task {
   bool deleted = false;
   String? seriesId;
 
+  /// 詳細の中で参照する、いまの情報（型番・連絡先など）。空は無しとして null に寄せる。
+  String? note;
+
   /// 自動生成された1件なら、元になった完了opのid。
   String? derivedFrom;
 
@@ -338,6 +342,8 @@ Map<String, Task> project(Iterable<Op> ops) {
           task.seriesId = (op.data['seriesId'] as String?) ?? op.issueId;
           task.derivedFrom = op.derivedFrom;
           task.originIssueId = op.data['originIssueId'] as String?;
+          final note = op.data['note'] as String?;
+          task.note = (note == null || note.isEmpty) ? null : note;
         }
       case OpKind.rename:
         task.title = (op.data['title'] as String?) ?? task.title;
@@ -351,6 +357,10 @@ Map<String, Task> project(Iterable<Op> ops) {
       case OpKind.comment:
         final text = op.data['text'] as String?;
         if (text != null && text.isNotEmpty) task.comments.add(text);
+      case OpKind.note:
+        // 同じ案件のいちばん新しいメモが現在値。空文字は「消した」。
+        final text = op.data['text'] as String?;
+        task.note = (text == null || text.isEmpty) ? null : text;
       case OpKind.status:
         final status = op.data['status'] as IssueStatus?;
         if (status != null && status != IssueStatus.done) {
@@ -453,6 +463,7 @@ List<Op> writeMissingFollowUps(
           'recurrence': task.recurrence,
           'seriesId': task.seriesId ?? task.id,
           'originIssueId': task.id,
+          'note': task.note,
         },
         derivedFrom: completion,
         at: at,
