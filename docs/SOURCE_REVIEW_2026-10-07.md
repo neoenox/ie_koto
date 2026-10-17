@@ -4,6 +4,31 @@
 
 実行結果: `flutter analyze` 問題なし、既存 `flutter test` 125件成功、`server` の `npm test` 17件成功。追加の一時テスト6件で下記の不具合を再現し、確認後に一時ファイルを削除した。サーバーの並行書き込みもSQLiteと実際の `pushOps` / `pullOps` を使って再現した。ソースの修正・デプロイは行っていない。Android実機・Cloudflare実環境・実ブラウザーでの今回の確認は行っていない。
 
+> **対応状況（2026-10-17）**: 下の13件は**すべて対応済み**。イシュー #1〜#13 はすべてクローズ済み。追跡は [#15](https://github.com/neoenox/ie_koto/issues/15)。詳細は下の「対応状況」。
+
+## 対応状況（2026-10-17）
+
+| # | 指摘 | Issue | PR | 状態 | 主な回帰テスト |
+|---|---|---|---|---|---|
+| 1 | すべての通常端末が同じ端末IDを使い衝突する | [#1](https://github.com/neoenox/ie_koto/issues/1) | [#29](https://github.com/neoenox/ie_koto/pull/29) | マージ済み | [test/persistence_test.dart](../test/persistence_test.dart) |
+| 2 | 1件リンクが世帯全体を操作できる鍵を渡している | [#2](https://github.com/neoenox/ie_koto/issues/2) | [#27](https://github.com/neoenox/ie_koto/pull/27) | マージ済み | [server/test/security.test.mjs](../server/test/security.test.mjs) |
+| 3 | 受信確定の前にcursorを進める | [#3](https://github.com/neoenox/ie_koto/issues/3) | [#17](https://github.com/neoenox/ie_koto/pull/17) | マージ済み | [test/sync_recovery_test.dart](../test/sync_recovery_test.dart) |
+| 4 | 番号確保と挿入が別処理で並行時に欠落する | [#4](https://github.com/neoenox/ie_koto/issues/4) | [#18](https://github.com/neoenox/ie_koto/pull/18) | マージ済み | [server/test/concurrent_pull.test.mjs](../server/test/concurrent_pull.test.mjs) |
+| 5 | 定期案件の「次の1件」を共有すると存在しない扱いになる | [#5](https://github.com/neoenox/ie_koto/issues/5) | [#30](https://github.com/neoenox/ie_koto/pull/30)（[#28](https://github.com/neoenox/ie_koto/pull/28) は置換） | マージ済み | [test/one_link_test.dart](../test/one_link_test.dart) / [test/one_link_worker_e2e_test.dart](../test/one_link_worker_e2e_test.dart) |
+| 6 | 不正な項目の型を受け入れ射影を停止させる | [#6](https://github.com/neoenox/ie_koto/issues/6) | [#19](https://github.com/neoenox/ie_koto/pull/19) | マージ済み | [test/sync_wire_test.dart](../test/sync_wire_test.dart) |
+| 7 | Androidリリース版のManifestに通信権限がない | [#7](https://github.com/neoenox/ie_koto/issues/7) | [#20](https://github.com/neoenox/ie_koto/pull/20) | マージ済み | [test/android_manifest_test.dart](../test/android_manifest_test.dart) |
+| 8 | 世帯切り替えでローカル記録と送信状態が混在する | [#8](https://github.com/neoenox/ie_koto/issues/8) | [#25](https://github.com/neoenox/ie_koto/pull/25) | マージ済み | [test/store_test.dart](../test/store_test.dart) / [test/save_status_test.dart](../test/save_status_test.dart) |
+| 9 | トークン再発行直後の招待文に古いトークンが入る | [#9](https://github.com/neoenox/ie_koto/issues/9) | [#22](https://github.com/neoenox/ie_koto/pull/22) | マージ済み | [test/invite_refresh_test.dart](../test/invite_refresh_test.dart) |
+| 10 | 復帰時・通常編集時に相手の変更を受信しない | [#10](https://github.com/neoenox/ie_koto/issues/10) | [#24](https://github.com/neoenox/ie_koto/pull/24) | マージ済み | [test/foreground_sync_test.dart](../test/foreground_sync_test.dart) |
+| 11 | 全案件を完了すると「おわったもの」へ入れない | [#11](https://github.com/neoenox/ie_koto/issues/11) | [#23](https://github.com/neoenox/ie_koto/pull/23) | マージ済み | [test/recurring_history_navigation_test.dart](../test/recurring_history_navigation_test.dart) / [test/ui_fixes_test.dart](../test/ui_fixes_test.dart) |
+| 12 | 別端末から読み込んだバックアップが共有されない | [#12](https://github.com/neoenox/ie_koto/issues/12) | [#26](https://github.com/neoenox/ie_koto/pull/26) | マージ済み | [test/backup_relay_test.dart](../test/backup_relay_test.dart) |
+| 13 | 別オリジンのWeb版では世帯削除がCORSで拒否される | [#13](https://github.com/neoenox/ie_koto/issues/13) | [#21](https://github.com/neoenox/ie_koto/pull/21) | マージ済み | [server/test/worker.test.mjs](../server/test/worker.test.mjs) |
+
+- 13件すべて対応済み。PR #28 は同じ #5 の修正で、[#30](https://github.com/neoenox/ie_koto/pull/30) に置き換えられた（#28 は未マージでクローズ）。
+- 検証: `flutter test --concurrency=1` は44ファイル・271件成功、`server` の `npm test` は37件成功、`flutter analyze` 問題なし。各PRのCI（checks / flutter / release-compile / server）は pass。
+- 限界（未実施）: **Android実機・Cloudflare本番・実ブラウザーでの確認は今回の範囲外**。それぞれ [#60](https://github.com/neoenox/ie_koto/issues/60) / [#62](https://github.com/neoenox/ie_koto/issues/62)・[#63](https://github.com/neoenox/ie_koto/issues/63)・[#113](https://github.com/neoenox/ie_koto/issues/113) で扱う。
+- 下の「検証の限界と追加確認」にある、**SharedPreferences への非同期書き込みの耐久性**（終了直前・容量不足・書き込み失敗）はこの13件に含めていない。保存の非同期状態は [test/save_status_test.dart](../test/save_status_test.dart)（5件）で扱うが、実端末での耐久性は未確認（[#60](https://github.com/neoenox/ie_koto/issues/60)）。
+
 ## P1（優先して修正）
 
 ### 1. すべての通常端末が同じ端末IDを使い、記録が衝突する
