@@ -38,6 +38,7 @@
 - 2026-10-16: 認可・秘密情報（#67）として [SECURITY.md](SECURITY.md) を追加（認可モデル、検証結果の対応表、秘密値の露出経路の棚卸し、本番構成の要件、残存リスク）。`server/test/security.test.mjs` で穴を補完（別世帯の管理操作の拒否・削除後の再作成の実挙動・入力の形とサイズ上限・平文の秘密がDBに無い・期限の境界・CORSの反射）。サーバー `npm test` は全37件成功（exit 0、skip 0）。Flutter側のコード変更はなし。
 - 2026-10-16: ストア掲載（#69）として表示名を `いえこと` に統一し、配布用アイコン（適応型・ラウンド・Web）とフィーチャーグラフィックを用意、Webメタデータ（`index.html`/`manifest.json`）を更新。エミュレーター実画面のスクリーンショット4枚を 2:1 以内に整えて [STORE_LISTING.md](STORE_LISTING.md) に掲載文・データ申告・初回起動デモの公開仕様を記録。`flutter build apk --debug` でリソース妥当性を確認（debug APKはGitに含めない）。掲載文の入力、AABの内部テスト配布、実機release同期は所有者承認後（#60）。
 - 2026-10-16: 初回利用・日本語入力・文字拡大・読み上げ・コントラスト（#70）として、IMEの確定/Enter（二重送信なし・変換中は未登録）と追加ボタン連打を [test/ime_submit_test.dart](../test/ime_submit_test.dart) に3件、実テーマの色からWCAG AAコントラスト（本文16.4:1／説明文8.9:1／エラー6.2:1／強調6.2:1／通知7.2:1／選択チップ5.2:1）を [test/contrast_test.dart](../test/contrast_test.dart) に1件追加。結果と人の手で残す範囲を [VERIFICATION.md](VERIFICATION.md) の #70 節に記録。`flutter analyze` 問題なし、`flutter test --concurrency=1` は43ファイル／262件成功（exit 0）。Flutter側の製品コード変更はなし。
+- 2026-10-17: 案件のメモ（#57）として op 種別 `note`（`data.text`、空文字は消去、last-wins、履歴には出さない）と `Issue.note`、詳細のメモ行＋編集ダイアログ、定期の引き継ぎ（次の1件へコピー・過去回は自分の値を保持）を追加。`wire` は `note`（空文字可・非文字列は破棄）と `add` の任意 `note` を検証。`test/issue_memo_test.dart` に9件（射影の現在値／空で消える／2台同時の収束／定期の引き継ぎと過去回の保持／消してから完了で次も空／wire往復と不正の破棄／詳細の表示・保存・消去・切り詰め）、`test/sync_wire_test.dart` の往復一覧に `note` を追加。[PRIVACY.md](PRIVACY.md) にメモの保存先・共有・自由入力の注意を追記。サーバーは op を解釈しないため変更なし。`flutter analyze` 問題なし、`flutter test --concurrency=1` は44ファイル／271件成功（exit 0）。
 
 ## GitHub上の運用
 

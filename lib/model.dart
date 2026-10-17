@@ -148,6 +148,9 @@ class Issue {
   IssueStatus status;
   DateTime? completedAt;
 
+  /// 詳細の中で参照する、いまの情報（型番・連絡先など）。ホームや一覧には出さない。
+  String? note;
+
   /// 完了時に自動生成した次の1件。もどす時に一緒に消す。
   String? generatedNextId;
 
@@ -164,6 +167,7 @@ class Issue {
     this.status = IssueStatus.open,
     this.seriesId,
     this.completedAt,
+    this.note,
     List<IssueEvent>? events,
   }) : events = events ?? <IssueEvent>[];
 

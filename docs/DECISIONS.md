@@ -56,7 +56,8 @@
 | status: open, doing, waiting, done | やること / 対応待ち / おわった |
 | recurrence | くりかえし。完了すると、決定的なid（`next:<完了opId>`）で次の1件が射影から出る |
 | seriesId | 同じ定期案件のまとまり。前回・前々回の計算に使う |
-| comments / attachments | 「これまで」の並び |
+| comments / attachments | 「これまで」の並び。メモは別（下の行） |
+| note（メモ） | 詳細の中だけの、いま参照する情報を1つ（任意）。`note` opで上書きし、空にすると消える。ホーム・一覧・通知には出さない（[adr/0004-issue-memo.md](adr/0004-issue-memo.md)） |
 | activity（履歴） | 追加・担当変更・期限変更・状態変更・完了・取り消し |
 | op（操作ログ） | 内部の持ち方。変更は上書きせずにopとして追記し、射影し直して画面に渡す。書いた人（`member`）もopに残る（[SYNC_DESIGN.md](SYNC_DESIGN.md)） |
 | 同期 | 追記したopを、そのままサーバーに預ける（opの出し入れ2本＋世帯の始末2本。[server/](../server/README.md)）。サーバーはopを解釈せず、突き合わせは端末側の射影だけが決める |
@@ -71,4 +72,3 @@
 - 保存の中身の暗号化（書き出し／読み込みによる引っ越しは、世帯のシートからできる）
 - OSの通知（アプリ内のお知らせ1行と、起動時同期後の担当通知までは済み。設計の3種「朝の要約・期限当日・自分の担当になった瞬間」に対応。当面見送りの方針と見直す条件は [adr/0002-notification-policy.md](adr/0002-notification-policy.md)）
 - 写真の取り込み（履歴の表示枠は画面側にあるが、opが無いのでデモには出していない。当面しない方針は [SYNC_DESIGN.md](SYNC_DESIGN.md) §10 の通り）
-- 案件のメモ（詳細内に任意で1つ。設計は確定、実装は別PR。[adr/0004-issue-memo.md](adr/0004-issue-memo.md)）

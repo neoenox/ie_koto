@@ -695,6 +695,20 @@ class IssueStore extends ChangeNotifier {
     );
   }
 
+  /// 詳細の中で参照するメモ。空文字は「消す」。書き込みは前後の空白を落とす。
+  void setNote(String id, String text) {
+    if (byId(id) == null) return;
+    _commit(
+      () => _device.write(
+        OpKind.note,
+        id,
+        at: now,
+        memberId: meId,
+        data: <String, Object?>{'text': text.trim()},
+      ),
+    );
+  }
+
   void comment(String id, String text) {
     final t = text.trim();
     if (t.isEmpty || byId(id) == null) return;
@@ -787,6 +801,7 @@ class IssueStore extends ChangeNotifier {
       status: task.status,
       seriesId: task.seriesId,
       completedAt: task.completedAt,
+      note: task.note,
       events: _events(task),
     );
     issue.generatedNextId = task.generatedNextId;
@@ -885,6 +900,9 @@ class IssueStore extends ChangeNotifier {
           actorId: actor,
           text: 'もどした',
         );
+      case OpKind.note:
+        // メモは詳細の中に出るので、履歴には残さない（名前と同じ扱い）。
+        return null;
       case OpKind.delete:
         return null;
     }
