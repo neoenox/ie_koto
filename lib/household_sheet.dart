@@ -56,6 +56,11 @@ enum _Mode { view, create, join }
 class _HouseholdSheetState extends State<HouseholdSheet> {
   late _Mode _mode = _current == null ? _Mode.create : _Mode.view;
 
+  final _invite = TextEditingController();
+  String? _inviteError;
+  bool _inviteReady = false;
+  bool _manualJoin = false;
+  bool _pasting = false;
   final _base = TextEditingController();
   final _household = TextEditingController();
   final _token = TextEditingController();
@@ -75,6 +80,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     // 未接続で参加リンクから開いたときだけ、3値を「はいる」側に入れる。
     if (join != null && _current == null) {
       _mode = _Mode.join;
+      _inviteReady = true;
       _base.text = join.apiBaseUrl;
       _household.text = join.householdId;
       _token.text = join.token;
@@ -87,6 +93,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
 
   @override
   void dispose() {
+    _invite.dispose();
     _base.dispose();
     _household.dispose();
     _token.dispose();
@@ -128,7 +135,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
               _currentView(_current!)
             else
               _form(),
-            if (widget.store != null) ...[
+            if (widget.store != null && _mode != _Mode.join) ...[
               const SizedBox(height: 16),
               _meSection(widget.store!),
               const SizedBox(height: 8),
@@ -178,7 +185,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           width: double.infinity,
           child: OutlinedButton(
             onPressed: () => _copyInvite(current),
-            child: const Text('招待文をコピー'),
+            child: const Text('招待をコピー'),
           ),
         ),
         Align(
@@ -193,7 +200,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
         ),
         const SizedBox(height: 4),
         Text(
-          '招待文には場所・世帯・トークンが入ります。家族にだけ送ってください',
+          '招待を家族に送り、「招待を貼り付ける」から入ってもらってください。家族以外には送らないでください',
           style: TextStyle(
             fontSize: 11.5,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -454,63 +461,43 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!creating || _current != null) const SizedBox(height: 8),
-        _caption('場所（APIのURL）'),
-        TextField(
-          controller: _base,
-          focusNode: _baseFocus,
-          keyboardType: TextInputType.url,
-          onChanged: (_) {
-            if (_baseError != null) setState(() => _baseError = null);
-          },
-          decoration: InputDecoration(
-            hintText: 'https://…',
-            isDense: true,
-            border: const OutlineInputBorder(),
-            errorText: _baseError,
-          ),
-        ),
         if (!creating) ...[
-          const SizedBox(height: 10),
-          _caption('世帯id'),
-          TextField(
-            controller: _household,
-            focusNode: _householdFocus,
-            onChanged: (_) {
-              if (_householdError != null) {
-                setState(() => _householdError = null);
-              }
-            },
-            decoration: InputDecoration(
-              isDense: true,
-              border: const OutlineInputBorder(),
-              errorText: _householdError,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _caption('トークン'),
-          TextField(
-            controller: _token,
-            focusNode: _tokenFocus,
-            onChanged: (_) {
-              if (_tokenError != null) setState(() => _tokenError = null);
-            },
-            decoration: InputDecoration(
-              isDense: true,
-              border: const OutlineInputBorder(),
-              errorText: _tokenError,
-            ),
-          ),
-        ] else ...[
           const SizedBox(height: 8),
-          Text(
-            'つくると世帯idとトークンを自動で決めます。この端末に残り、最初の同期で家が作られます',
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          const Text('家族から届いた招待を、そのまま貼り付けてください'),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: _pasting ? null : _pasteInvite,
+            child: const Text('招待を貼り付ける'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('household-invite'),
+            controller: _invite,
+            minLines: 2,
+            maxLines: 4,
+            autocorrect: false,
+            enableSuggestions: false,
+            onChanged: (_) => _readInvite(showError: false),
+            decoration: InputDecoration(
+              labelText: '招待文または招待リンク',
+              errorText: _inviteError,
+              border: const OutlineInputBorder(),
             ),
           ),
-        ],
+          if (_inviteReady) ...[
+            const SizedBox(height: 8),
+            const Text('招待を読み込みました'),
+            const Text('この家に入り、家族と用事を共有します。名前は入った後で選べます'),
+          ],
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('詳細設定'),
+            onExpansionChanged: (expanded) =>
+                setState(() => _manualJoin = expanded),
+            children: [_connectionFields(false)],
+          ),
+        ] else
+          _connectionFields(true),
         if (_baseError != null ||
             _householdError != null ||
             _tokenError != null) ...[
@@ -532,11 +519,106 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
           height: 48,
           child: FilledButton(
             onPressed: creating ? _create : _join,
-            child: Text(creating ? 'つくる' : 'はいる'),
+            child: Text(creating ? 'つくる' : 'この家に入る'),
           ),
         ),
       ],
     );
+  }
+
+  Widget _connectionFields(bool creating) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (!creating || _current != null) const SizedBox(height: 8),
+      _caption('場所（APIのURL）'),
+      TextField(
+        controller: _base,
+        focusNode: _baseFocus,
+        keyboardType: TextInputType.url,
+        onChanged: (_) {
+          if (_baseError != null) setState(() => _baseError = null);
+        },
+        decoration: InputDecoration(
+          hintText: 'https://…',
+          isDense: true,
+          border: const OutlineInputBorder(),
+          errorText: _baseError,
+        ),
+      ),
+      if (!creating) ...[
+        const SizedBox(height: 10),
+        _caption('世帯id'),
+        TextField(
+          controller: _household,
+          focusNode: _householdFocus,
+          onChanged: (_) {
+            if (_householdError != null) {
+              setState(() => _householdError = null);
+            }
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            border: const OutlineInputBorder(),
+            errorText: _householdError,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _caption('トークン'),
+        TextField(
+          controller: _token,
+          focusNode: _tokenFocus,
+          onChanged: (_) {
+            if (_tokenError != null) setState(() => _tokenError = null);
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            border: const OutlineInputBorder(),
+            errorText: _tokenError,
+          ),
+        ),
+      ] else ...[
+        const SizedBox(height: 8),
+        Text(
+          'つくると世帯idとトークンを自動で決めます。この端末に残り、最初の同期で家が作られます',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ],
+  );
+
+  Future<void> _pasteInvite() async {
+    setState(() => _pasting = true);
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (!mounted) return;
+      _invite.text = data?.text ?? '';
+      _readInvite();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _inviteError = '貼り付けられませんでした。下の欄に招待を貼り付けてください');
+    } finally {
+      if (mounted) setState(() => _pasting = false);
+    }
+  }
+
+  bool _readInvite({bool showError = true}) {
+    final invite = HouseholdSetup.parseInvite(_invite.text);
+    setState(() {
+      _inviteReady = invite != null;
+      _inviteError = invite == null && showError
+          ? '招待を読み取れませんでした。家族から届いた招待を全部コピーしてください'
+          : null;
+      if (invite != null) {
+        _base.text = invite.baseUrl;
+        _household.text = invite.householdId;
+        _token.text = invite.token;
+        _clearErrors();
+      }
+    });
+    return invite != null;
   }
 
   void _create() {
@@ -556,6 +638,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
   }
 
   void _join() {
+    if (!_manualJoin && !_inviteReady && !_readInvite()) return;
     final baseUrl = HouseholdSetup.normalizeBaseUrl(_base.text);
     final hError = HouseholdSetup.validateHouseholdId(_household.text);
     final tError = HouseholdSetup.validateToken(_token.text);
@@ -590,7 +673,7 @@ class _HouseholdSheetState extends State<HouseholdSheet> {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('招待文をコピーしました。「はいっている家にはいる」に入れてください')),
+      const SnackBar(content: Text('招待文をコピーしました。「招待を貼り付ける」から入ってください')),
     );
   }
 

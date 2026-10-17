@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../join_link.dart';
 import 'storage.dart';
 
 /// 世帯参加UIのための生成・検証ロジック（画面なしで検証できる部分）。
@@ -10,6 +11,50 @@ import 'storage.dart';
 /// - APIの場所: http/https のURL
 class HouseholdSetup {
   const HouseholdSetup._();
+
+  /// コピーされた招待リンク、または従来の3行の招待文を読む。
+  static SyncCredentials? parseInvite(String raw) {
+    final text = raw.trim();
+    String? base;
+    String? household;
+    String? token;
+    try {
+      final uri = Uri.tryParse(text);
+      final link = uri == null || !uri.hasAuthority || uri.host.isEmpty
+          ? null
+          : JoinLink.fromUri(uri);
+      if (link != null) {
+        base = link.apiBaseUrl;
+        household = link.householdId;
+        token = link.token;
+      } else {
+        final values = <String, String>{};
+        for (final line in text.split(RegExp(r'\r?\n'))) {
+          final match = RegExp(
+            r'^(場所|世帯|トークン)\s+(.+)$',
+          ).firstMatch(line.trim());
+          if (match == null || values.containsKey(match[1])) return null;
+          values[match[1]!] = match[2]!;
+        }
+        base = values['場所'];
+        household = values['世帯'];
+        token = values['トークン'];
+      }
+      final normalized = normalizeBaseUrl(base ?? '');
+      if (normalized == null ||
+          validateHouseholdId(household ?? '') != null ||
+          validateToken(token ?? '') != null) {
+        return null;
+      }
+      return SyncCredentials(
+        baseUrl: normalized,
+        householdId: household!.trim(),
+        token: token!.trim(),
+      );
+    } on FormatException {
+      return null;
+    }
+  }
 
   static final RegExp householdPattern = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
 
