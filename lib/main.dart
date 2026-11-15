@@ -31,6 +31,10 @@ Future<void> main() async {
 
   // 端末に残したものを読む前に、Flutter の準備を整えておく。
   final storage = await DeviceStorage.open();
+  final previousHousehold = storage.load().sync?.householdId;
+  await storage.migrateLegacyScope(
+    previousHousehold?.isNotEmpty == true ? previousHousehold! : 'solo',
+  );
   runApp(IeKotoApp(storage: storage, joinLink: joinLink));
 }
 
