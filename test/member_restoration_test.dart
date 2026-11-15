@@ -23,14 +23,18 @@ const directory = MemberDirectory(
 void main() {
   test('非同期保存をflush後、新しい保存インスタンスから名簿と担当を復元する', () async {
     final kv = ConfirmedMemoryStore();
-    final storage = DeviceStorage(kv).scoped('async');
+    final initialStorage = DeviceStorage(kv);
+    await initialStorage.migrateLegacyScope('async');
+    final storage = initialStorage.scoped('async');
     final first = IssueStore(storage: storage);
     final issue = first.add(title: '修理', assigneeId: 'partner');
     first.applyMemberDirectory(directory);
     first.setMeId('mem_b');
     first.renameMember('mem_b', '春');
     await storage.flush();
-    final restored = IssueStore(storage: DeviceStorage(kv).scoped('async'));
+    final restoredStorage = DeviceStorage(kv);
+    await restoredStorage.migrateLegacyScope('async');
+    final restored = IssueStore(storage: restoredStorage.scoped('async'));
     expect(restored.byId(issue.id)!.assigneeId, 'mem_b');
     // 装置が mem_b 本人なので鏡表示は「自分」。中身の名前は「春」。
     expect(restored.memberLabel('partner'), '自分');
