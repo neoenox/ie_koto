@@ -211,35 +211,74 @@ class DeviceStorage extends ChangeNotifier implements Storage {
 
   final KeyValueStore _baseStore;
   final String? namespace;
+  bool _legacyScopeMigrationReady = false;
 
-  /// Keep each household's operation log and local settings in a separate key space.
+  /// Copy legacy keys into their first household namespace.
+  ///
+  /// Scan for missing destination keys even when the marker is already true:
+  /// older versions could persist the marker before their unawaited SharedPreferences
+  /// writes completed. Confirm each async copy before publishing the marker.
+  Future<void> migrateLegacyScope(String namespace) async {
+    const migratedKey = 'ie_koto.household_scope_migrated';
+    final scoped = _ScopedKeyValueStore(_baseStore, namespace);
+    for (final key in _legacyKeys()) {
+      final value = _baseStore.read(key);
+      if (value == null || scoped.read(key) != null) continue;
+      final base = _baseStore;
+      if (base is AsyncKeyValueStore) {
+        await base.writeConfirmed(scoped._key(key), value);
+      } else {
+        scoped.write(key, value);
+      }
+    }
+
+    if (_baseStore.read(migratedKey) != 'true') {
+      final base = _baseStore;
+      if (base is AsyncKeyValueStore) {
+        await base.writeConfirmed(migratedKey, 'true');
+      } else {
+        base.write(migratedKey, 'true');
+      }
+    }
+    _legacyScopeMigrationReady = true;
+  }
+
+  Iterable<String> _legacyKeys() sync* {
+    yield deviceKey;
+    yield pushedKey;
+    yield relayKey;
+    yield syncKey;
+    yield meKey;
+    yield meExplicitKey;
+    yield membersKey;
+    yield aliasesKey;
+    yield pendingMembersKey;
+    yield pendingMemberAliasesKey;
+    yield pendingMemberRemovalsKey;
+    final chunks = int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0;
+    for (var i = 0; i < chunks; i++) {
+      yield chunkKey(i);
+    }
+    // Publish the chunk count last so a partial copy is never treated as complete.
+    yield chunksKey;
+  }
+
+  /// Return a household-scoped view after legacy migration has been confirmed.
   DeviceStorage scoped(String namespace) {
     const migratedKey = 'ie_koto.household_scope_migrated';
-    if (_baseStore.read(migratedKey) != 'true') {
-      final scoped = _ScopedKeyValueStore(_baseStore, namespace);
-      for (final key in [
-        chunksKey,
-        deviceKey,
-        pushedKey,
-        syncKey,
-        meKey,
-        meExplicitKey,
-        membersKey,
-        aliasesKey,
-        pendingMembersKey,
-        pendingMemberAliasesKey,
-        pendingMemberRemovalsKey,
-        for (
-          var i = 0;
-          i < (int.tryParse(_baseStore.read(chunksKey) ?? '') ?? 0);
-          i++
-        )
-          chunkKey(i),
-      ]) {
-        final value = _baseStore.read(key);
+    final base = _baseStore;
+    if (base is AsyncKeyValueStore) {
+      if (!_legacyScopeMigrationReady) {
+        throw StateError('Call and await migrateLegacyScope() before scoped().');
+      }
+    } else if (base.read(migratedKey) != 'true') {
+      final scoped = _ScopedKeyValueStore(base, namespace);
+      for (final key in _legacyKeys()) {
+        final value = base.read(key);
         if (value != null && scoped.read(key) == null) scoped.write(key, value);
       }
-      _baseStore.write(migratedKey, 'true');
+      base.write(migratedKey, 'true');
+      _legacyScopeMigrationReady = true;
     }
     return DeviceStorage._(_baseStore, namespace);
   }
